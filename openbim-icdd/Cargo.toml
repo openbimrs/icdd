@@ -1,0 +1,15 @@
+[package]
+name = "openbim-icdd"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository = "https://github.com/openbimrs/openbim"
+readme = "README.md"
+description = "ISO 21597 ICDD (Information Container for linked Document Delivery)."
+keywords = ["bim", "openbim", "ifc", "aec"]
+categories = ["parser-implementations", "data-structures"]
+
+[dependencies]
+openbim-core.workspace = true
