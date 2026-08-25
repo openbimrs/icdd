@@ -26,6 +26,10 @@ fn zip_with_index(index: &[u8], extra_name: Option<&str>, extra: &[u8]) -> Vec<u
 }
 
 fn icdd_with_filename(filename: &str) -> Vec<u8> {
+    icdd_with_declared_and_entry(filename, filename)
+}
+
+fn icdd_with_declared_and_entry(declared: &str, entry: &str) -> Vec<u8> {
     let index = r##"<rdf:RDF
       xml:base="https://example.test/"
       xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
@@ -39,9 +43,9 @@ fn icdd_with_filename(filename: &str) -> Vec<u8> {
         <ct:filetype>ifc</ct:filetype>
       </ct:InternalDocument>
     </rdf:RDF>"##
-        .replace("__FILENAME__", filename);
-    let entry = format!("Payload documents/{filename}");
-    zip_with_index(index.as_bytes(), Some(&entry), b"not allowed")
+        .replace("__FILENAME__", declared);
+    let archive_entry = format!("Payload documents/{entry}");
+    zip_with_index(index.as_bytes(), Some(&archive_entry), b"not allowed")
 }
 
 #[test]
@@ -61,6 +65,18 @@ fn case_folded_and_noncanonical_entry_names_are_rejected() {
         }
         let bytes = writer.finish().unwrap().into_inner();
         assert!(IcddContainer::open_bytes(bytes).is_err());
+    }
+}
+
+#[test]
+fn declared_paths_with_ambiguous_normalization_are_rejected() {
+    for path in ["nested//model.ifc", "nested/model.ifc/"] {
+        let error =
+            match IcddContainer::open_bytes(icdd_with_declared_and_entry(path, "model.ifc")) {
+            Ok(_) => panic!("ambiguous declared path must fail closed"),
+            Err(error) => error,
+        };
+        assert!(error.to_string().contains("unsafe or noncanonical archive path"));
     }
 }
 

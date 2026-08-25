@@ -200,7 +200,12 @@ fn validate_entry_name(name: &str) -> Result<(), IcddError> {
 }
 
 fn validate_declared_path(name: &str) -> Result<(), IcddError> {
-    if name.is_empty() || name.contains('\\') || name.starts_with('/') || name.contains("//") {
+    if name.is_empty()
+        || name.contains('\\')
+        || name.starts_with('/')
+        || name.ends_with('/')
+        || name.contains("//")
+    {
         return Err(IcddError::NotConformant(format!(
             "unsafe or noncanonical archive path: {name:?}"
         )));
