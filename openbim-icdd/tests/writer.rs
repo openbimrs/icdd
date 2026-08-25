@@ -104,3 +104,30 @@ fn builder_rejects_missing_declared_linksets() {
         .expect_err("declared links.rdf is missing");
     assert!(error.to_string().contains("links.rdf"));
 }
+
+#[test]
+fn builder_rejects_undeclared_payloads_and_linksets() {
+    let extra_payload = IcddArchiveBuilder::new(INDEX.as_bytes())
+        .unwrap()
+        .add_payload("model.ifc", b"ISO-10303-21;")
+        .unwrap()
+        .add_payload("undeclared.ifc", b"ISO-10303-21;")
+        .unwrap()
+        .add_linkset("links.rdf", LINKSET.as_bytes())
+        .unwrap()
+        .finish()
+        .expect_err("undeclared payload must be rejected");
+    assert!(extra_payload.to_string().contains("undeclared payload"));
+
+    let extra_linkset = IcddArchiveBuilder::new(INDEX.as_bytes())
+        .unwrap()
+        .add_payload("model.ifc", b"ISO-10303-21;")
+        .unwrap()
+        .add_linkset("links.rdf", LINKSET.as_bytes())
+        .unwrap()
+        .add_linkset("undeclared.rdf", LINKSET.as_bytes())
+        .unwrap()
+        .finish()
+        .expect_err("undeclared linkset must be rejected");
+    assert!(extra_linkset.to_string().contains("undeclared linkset"));
+}

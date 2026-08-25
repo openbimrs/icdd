@@ -69,20 +69,39 @@ fn validate_transform(transform: &[f64; 16]) -> Result<(), IcddError> {
             "federation member transform must contain finite numbers",
         ));
     }
-    let tolerance = 1e-12;
-    if transform[12].abs() > tolerance
-        || transform[13].abs() > tolerance
-        || transform[14].abs() > tolerance
-        || (transform[15] - 1.0).abs() > tolerance
+    if transform[12] != 0.0 || transform[13] != 0.0 || transform[14] != 0.0 || transform[15] != 1.0
     {
         return Err(invalid(
             "federation member transform must be an affine 4x4 matrix",
         ));
     }
-    let determinant = transform[0] * (transform[5] * transform[10] - transform[9] * transform[6])
-        - transform[4] * (transform[1] * transform[10] - transform[9] * transform[2])
-        + transform[8] * (transform[1] * transform[6] - transform[5] * transform[2]);
-    if determinant.abs() <= tolerance {
+
+    // Scale each row independently before taking the determinant. This avoids
+    // overflow/underflow while preserving singularity (including proportional
+    // rows with very large finite coefficients).
+    let rows = [
+        [transform[0], transform[1], transform[2]],
+        [transform[4], transform[5], transform[6]],
+        [transform[8], transform[9], transform[10]],
+    ];
+    let scales = rows.map(|row| row.into_iter().map(f64::abs).fold(0.0, f64::max));
+    if scales.contains(&0.0) {
+        return Err(invalid("federation member transform must be invertible"));
+    }
+    let normalized = [
+        rows[0].map(|value| value / scales[0]),
+        rows[1].map(|value| value / scales[1]),
+        rows[2].map(|value| value / scales[2]),
+    ];
+    let [[a, b, c], [d, e, f], [g, h, i]] = normalized;
+    let determinant = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
+    let log_abs_determinant =
+        determinant.abs().ln() + scales[0].ln() + scales[1].ln() + scales[2].ln();
+    if !determinant.is_finite()
+        || determinant == 0.0
+        || !log_abs_determinant.is_finite()
+        || log_abs_determinant <= f64::EPSILON.ln()
+    {
         return Err(invalid("federation member transform must be invertible"));
     }
     Ok(())
@@ -350,16 +369,7 @@ pub fn parse_poing_federation_icdd(bytes: &[u8]) -> Result<PoingFederationManife
         .find(|document| document.internal_path() == Some(FEDERATION_RDF))
         .cloned()
         .ok_or_else(|| invalid("ICDD has no Poing federation metadata document"))?;
-    let declared_sources = container
-        .index()
-        .documents
-        .iter()
-        .filter_map(|document| match &document.kind {
-            crate::DocumentKind::Internal { filename } => Some(filename.clone()),
-            crate::DocumentKind::External { url } => Some(url.clone()),
-            crate::DocumentKind::Folder { .. } => None,
-        })
-        .collect::<BTreeSet<_>>();
+    let source_documents = container.index().documents.clone();
     let rdf = container.payload_bytes(&document)?;
     let graph = RdfGraph::parse(rdf.as_slice())?;
     let roots = graph.subjects_of_type_ns(POING, "Federation");
@@ -391,11 +401,34 @@ pub fn parse_poing_federation_icdd(bytes: &[u8]) -> Result<PoingFederationManife
     };
     validate_manifest(&manifest)?;
     for member in &manifest.members {
-        if !declared_sources.contains(&member.source) {
+        let matching = source_documents
+            .iter()
+            .filter(|candidate| match &candidate.kind {
+                crate::DocumentKind::Internal { filename } => filename == &member.source,
+                crate::DocumentKind::External { url } => url == &member.source,
+                crate::DocumentKind::Folder { .. } => false,
+            })
+            .collect::<Vec<_>>();
+        if matching.len() != 1 {
             return Err(invalid(&format!(
-                "federation member {} source {:?} is not declared by Index.rdf",
+                "federation member {} source {:?} must identify exactly one Index.rdf document",
                 member.id, member.source
             )));
+        }
+        let source_document = matching[0];
+        if source_document.id == document.id || source_document.requested {
+            return Err(invalid(&format!(
+                "federation member {} source {:?} is not an available model document",
+                member.id, member.source
+            )));
+        }
+        if let crate::DocumentKind::Internal { filename } = &source_document.kind {
+            if !container.contains_internal_payload(filename) {
+                return Err(invalid(&format!(
+                    "federation member {} has unavailable internal source {:?}",
+                    member.id, member.source
+                )));
+            }
         }
     }
     Ok(manifest)

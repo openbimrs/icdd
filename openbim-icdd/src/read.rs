@@ -197,6 +197,11 @@ impl<R: Read + Seek> IcddContainer<R> {
         &self.top_folders
     }
 
+    /// Whether one canonical internal payload path resolves in the archive.
+    pub(crate) fn contains_internal_payload(&self, filename: &str) -> bool {
+        self.zip.contains_payload(filename)
+    }
+
     /// The IFC payload documents (what we hand to `ifc2smc`). By default only
     /// **available** payloads are returned — an IFC document that is a
     /// `ct:requested` slot (a placeholder for a not-yet-delivered file, with no
@@ -302,6 +307,16 @@ impl<R: Read + Seek> IcddContainer<R> {
         ] {
             if !self.top_folders.iter().any(|f| f == folder) {
                 issues.push(format!("missing top-level folder '{folder}'"));
+            }
+        }
+        for document in &self.index.documents {
+            if document.requested {
+                continue;
+            }
+            if let DocumentKind::Internal { filename } = &document.kind {
+                if !self.zip.contains_payload(filename) {
+                    issues.push(format!("missing declared payload document: {filename}"));
+                }
             }
         }
         match &self.index.description.conformance_indicator {

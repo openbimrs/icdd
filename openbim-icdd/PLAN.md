@@ -58,16 +58,17 @@ must consume this crate rather than maintaining their own archive/RDF parser.
 
 ## Evidence
 
-- Standalone reader/writer/security/RDF/federation tests: 23 passed, plus one
+- Standalone reader/writer/security/RDF/federation tests: 30 passed, plus one
   compile-tested doctest.
 - Existing Solibri ICDD oracle and reproducibility suites against the hardened
   canonical crate: 6 passed both in the isolated harness and clean consumer.
 - Alias purity: baseline accepted and all mutations rejected.
-- Full locked `scripts/gate.sh`: format, build, tests, Clippy, rustdoc, and
-  mutation stages pass. Packaging is intentionally pending the exact commit,
-  because Cargo refuses dirty package verification.
+- Full locked constituent gate: format, build, tests, Clippy, rustdoc, alias
+  mutations, and canonical package verification pass. Alias packaging follows
+  canonical `openbim-icdd = 0.2.0` publication by Cargo's required order.
 - Follow-up security regressions cover namespace spoofing, uncontained members,
   subtype-only links, undeclared/missing linksets, case-folded ZIP names,
-  noncanonical paths, source-binding mismatches, UUIDs, and affine/invertible
+  noncanonical paths, unavailable/ambiguous federation sources, undeclared
+  writer inputs, source-binding mismatches, UUIDs, and robust affine/invertible
   transforms.
 - Restricted ISO material was not copied into the repository.

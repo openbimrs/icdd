@@ -48,6 +48,10 @@ fn synthetic_icdd() -> Vec<u8> {
 }
 
 fn archive(index: &str, linkset: Option<&str>) -> Vec<u8> {
+    archive_with_payload(index, linkset, true)
+}
+
+fn archive_with_payload(index: &str, linkset: Option<&str>, include_payload: bool) -> Vec<u8> {
     let cursor = Cursor::new(Vec::new());
     let mut zip = ZipWriter::new(cursor);
     let options = SimpleFileOptions::default();
@@ -60,10 +64,12 @@ fn archive(index: &str, linkset: Option<&str>) -> Vec<u8> {
     }
     zip.start_file("Index.rdf", options).unwrap();
     zip.write_all(index.as_bytes()).unwrap();
-    zip.start_file("Payload documents/model.ifc", options)
-        .unwrap();
-    zip.write_all(b"ISO-10303-21;\nEND-ISO-10303-21;\n")
-        .unwrap();
+    if include_payload {
+        zip.start_file("Payload documents/model.ifc", options)
+            .unwrap();
+        zip.write_all(b"ISO-10303-21;\nEND-ISO-10303-21;\n")
+            .unwrap();
+    }
     if let Some(linkset) = linkset {
         zip.start_file("Payload triples/links.rdf", options)
             .unwrap();
@@ -163,4 +169,14 @@ fn document_order_is_reproducible() {
             .collect();
         assert_eq!(first, next);
     }
+}
+
+#[test]
+fn conformance_reports_missing_declared_internal_documents() {
+    let container = IcddContainer::open_bytes(archive_with_payload(INDEX, Some(LINKSET), false))
+        .expect("missing payload is reportable rather than an open error");
+    assert!(container
+        .conformance_issues()
+        .iter()
+        .any(|issue| issue.contains("missing declared payload document: model.ifc")));
 }

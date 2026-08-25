@@ -71,12 +71,14 @@ fn case_folded_and_noncanonical_entry_names_are_rejected() {
 #[test]
 fn declared_paths_with_ambiguous_normalization_are_rejected() {
     for path in ["nested//model.ifc", "nested/model.ifc/"] {
-        let error =
-            match IcddContainer::open_bytes(icdd_with_declared_and_entry(path, "model.ifc")) {
+        let error = match IcddContainer::open_bytes(icdd_with_declared_and_entry(path, "model.ifc"))
+        {
             Ok(_) => panic!("ambiguous declared path must fail closed"),
             Err(error) => error,
         };
-        assert!(error.to_string().contains("unsafe or noncanonical archive path"));
+        assert!(error
+            .to_string()
+            .contains("unsafe or noncanonical archive path"));
     }
 }
 

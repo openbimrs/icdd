@@ -2,6 +2,9 @@ use openbim_icdd::{
     parse_poing_federation_icdd, write_poing_federation_icdd, FederationIcddPayload, IcddContainer,
     PoingFederationManifest, PoingFederationMember,
 };
+use std::io::{Cursor, Read, Write};
+use zip::write::SimpleFileOptions;
+use zip::{ZipArchive, ZipWriter};
 
 fn manifest() -> PoingFederationManifest {
     PoingFederationManifest {
@@ -89,4 +92,53 @@ fn federation_writer_rejects_singular_transforms() {
     let mut manifest = manifest();
     manifest.members[0].transform[0] = 0.0;
     assert!(write_poing_federation_icdd(&manifest, &payloads()).is_err());
+}
+
+#[test]
+fn federation_writer_rejects_tiny_projective_terms() {
+    let mut manifest = manifest();
+    manifest.members[0].transform[12] = 1e-13;
+    assert!(write_poing_federation_icdd(&manifest, &payloads()).is_err());
+}
+
+#[test]
+fn federation_writer_accepts_small_but_invertible_transforms() {
+    let mut manifest = manifest();
+    manifest.members[0].transform[0] = 1e-13;
+    assert!(write_poing_federation_icdd(&manifest, &payloads()).is_ok());
+}
+
+#[test]
+fn federation_writer_rejects_overflowing_singular_transforms() {
+    let mut manifest = manifest();
+    manifest.members[0].transform = [
+        1e308, 1e308, 0.0, 0.0, 1e308, 1e308, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
+    ];
+    assert!(write_poing_federation_icdd(&manifest, &payloads()).is_err());
+}
+
+#[test]
+fn federation_parser_rejects_missing_internal_member_payloads() {
+    let archive = write_poing_federation_icdd(&manifest(), &payloads()).unwrap();
+    let mut input = ZipArchive::new(Cursor::new(archive)).unwrap();
+    let mut output = ZipWriter::new(Cursor::new(Vec::new()));
+    let options = SimpleFileOptions::default();
+    for index in 0..input.len() {
+        let mut entry = input.by_index(index).unwrap();
+        if entry.name() == "Payload documents/architecture.ifc" {
+            continue;
+        }
+        if entry.is_dir() {
+            output.add_directory(entry.name(), options).unwrap();
+        } else {
+            output.start_file(entry.name(), options).unwrap();
+            let mut bytes = Vec::new();
+            entry.read_to_end(&mut bytes).unwrap();
+            output.write_all(&bytes).unwrap();
+        }
+    }
+    let incomplete = output.finish().unwrap().into_inner();
+    let error = parse_poing_federation_icdd(&incomplete)
+        .expect_err("missing member payload must fail closed");
+    assert!(error.to_string().contains("unavailable internal source"));
 }

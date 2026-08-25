@@ -1,6 +1,6 @@
 //! Deterministic ICDD archive construction using the maintained `zip` crate.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io::{Cursor, Write};
 use std::path::{Component, Path, PathBuf};
 
@@ -126,12 +126,14 @@ impl IcddArchiveBuilder {
 
     fn validate_declared_entries(&self) -> Result<(), IcddError> {
         let index = parse_index(&self.index_rdf)?;
+        let mut declared_payloads = BTreeSet::new();
         for document in &index.documents {
             if document.requested {
                 continue;
             }
             if let DocumentKind::Internal { filename } = &document.kind {
                 let filename = normalize_relative_path(filename)?;
+                declared_payloads.insert(filename.clone());
                 if !self.payloads.contains_key(&filename) {
                     return Err(IcddError::NotConformant(format!(
                         "Index.rdf declares missing payload document: {filename}"
@@ -139,15 +141,40 @@ impl IcddArchiveBuilder {
                 }
             }
         }
+        if let Some(filename) = self
+            .payloads
+            .keys()
+            .find(|filename| !declared_payloads.contains(*filename))
+        {
+            return Err(IcddError::NotConformant(format!(
+                "archive contains undeclared payload document: {filename}"
+            )));
+        }
+
+        let mut declared_linksets = BTreeSet::new();
         for linkset in &index.linkset_files {
-            if let Some(filename) = &linkset.filename {
-                let filename = normalize_relative_path(filename)?;
-                if !self.linksets.contains_key(&filename) {
-                    return Err(IcddError::NotConformant(format!(
-                        "Index.rdf declares missing linkset: {filename}"
-                    )));
-                }
+            let raw_filename = linkset.filename.as_deref().ok_or_else(|| {
+                IcddError::NotConformant(format!(
+                    "Index.rdf linkset {} has no filename",
+                    linkset.id
+                ))
+            })?;
+            let filename = normalize_relative_path(raw_filename)?;
+            declared_linksets.insert(filename.clone());
+            if !self.linksets.contains_key(&filename) {
+                return Err(IcddError::NotConformant(format!(
+                    "Index.rdf declares missing linkset: {filename}"
+                )));
             }
+        }
+        if let Some(filename) = self
+            .linksets
+            .keys()
+            .find(|filename| !declared_linksets.contains(*filename))
+        {
+            return Err(IcddError::NotConformant(format!(
+                "archive contains undeclared linkset: {filename}"
+            )));
         }
         Ok(())
     }
