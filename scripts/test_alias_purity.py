@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
@@ -26,6 +27,7 @@ def run_checker(candidate: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, "scripts/check_alias_purity.py"],
         cwd=candidate,
+        env={**os.environ, "ICDD_ALIAS_ALLOW_UNLOCKED": "1"},
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
@@ -123,9 +125,9 @@ def main() -> None:
             candidate,
             "alias version drift with decoy",
             lambda alias, _canonical, _source, _extra: (
-                replace(alias, 'version = "0.1.0"', 'version = "0.1.1"'),
+                replace(alias, 'version = "0.2.0"', 'version = "0.2.1"'),
                 alias.write_text(
-                    'version = "0.1.0"\n' + alias.read_text(encoding="utf-8"),
+                    'version = "0.2.0"\n' + alias.read_text(encoding="utf-8"),
                     encoding="utf-8",
                 ),
             ),

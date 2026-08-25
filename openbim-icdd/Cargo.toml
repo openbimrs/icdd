@@ -1,6 +1,6 @@
 [package]
 name = "openbim-icdd"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 rust-version = "1.88"
 license = "MIT"
@@ -10,6 +10,13 @@ readme = "README.md"
 description = "ISO 21597 ICDD (Information Container for linked Document Delivery)."
 keywords = ["bim", "openbim", "ifc", "aec"]
 categories = ["parser-implementations", "data-structures"]
+include = ["Cargo.toml", "LICENSE", "README.md", "src/**"]
 
 [dependencies]
-openbim-core = "0.1.0"
+num-bigint = "0.4.8"
+oxrdf = "0.3.3"
+oxrdfxml = "0.2.3"
+serde = { version = "1.0", features = ["derive"] }
+thiserror = "2.0"
+uuid = { version = "1.18", default-features = false, features = ["serde", "std"] }
+zip = { version = "8.6.0", default-features = false, features = ["deflate-flate2-zlib-rs"] }

@@ -9,17 +9,13 @@ its own, so both package names expose exactly the same types and behavior.
 
 ```toml
 # Choose either package; do not add both directly.
-icdd = "0.1"
-# openbim-icdd = "0.1"
+icdd = "0.2"
+# openbim-icdd = "0.2"
 ```
 
 The dependency is pinned to the exact canonical version, and the repository gate
-rejects implementation or independent type definitions in this package.
-
-## Status
-
-**Reserved scaffold.** See
-[`openbim-icdd`](https://crates.io/crates/openbim-icdd) for the capability
+rejects implementation or independent type definitions in this package. See
+[`openbim-icdd`](https://crates.io/crates/openbim-icdd) for exact capability
 status.
 
 ## License
