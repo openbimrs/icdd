@@ -10,5 +10,6 @@ cargo test --workspace --all-features
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 RUSTDOCFLAGS="-D warnings" cargo doc --workspace --all-features --no-deps
 scripts/check-alias-purity.sh
+python3 scripts/test_alias_purity.py
 cargo package -p openbim-icdd
 cargo package -p icdd

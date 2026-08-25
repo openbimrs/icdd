@@ -86,6 +86,12 @@ if dependency["name"] != "openbim-icdd" or dependency.get("rename") is not None:
     fail("icdd's sole dependency must be the unrenamed openbim-icdd package")
 if dependency.get("kind") is not None or dependency.get("optional"):
     fail("openbim-icdd must be a required normal dependency")
+if dependency.get("target") is not None:
+    fail("openbim-icdd dependency must apply on every target")
+if dependency.get("features"):
+    fail("openbim-icdd dependency must not override canonical features")
+if dependency.get("uses_default_features") is not True:
+    fail("openbim-icdd dependency must retain canonical default features")
 expected_requirement = f"={canonical_version}"
 if dependency["req"] != expected_requirement:
     fail(
