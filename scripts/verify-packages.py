@@ -26,11 +26,13 @@ def run(
         check=False,
         text=True,
         stdout=subprocess.PIPE if capture else None,
-        stderr=subprocess.STDOUT if capture else None,
+        stderr=subprocess.PIPE if capture else None,
     )
     if result.returncode != 0:
         if result.stdout:
             print(result.stdout, file=sys.stderr)
+        if result.stderr:
+            print(result.stderr, file=sys.stderr)
         raise SystemExit(result.returncode)
     return result
 
