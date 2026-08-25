@@ -107,6 +107,13 @@ def main() -> None:
         require_rejection(candidate, "alternate active library target", alternate_target)
         require_rejection(
             candidate,
+            "unreferenced implementation file",
+            lambda _alias, _canonical, _source, extra: extra.write_text(
+                "pub struct HiddenOwned;\n", encoding="utf-8"
+            ),
+        )
+        require_rejection(
+            candidate,
             "owned source item",
             lambda _alias, _canonical, source, _extra: source.write_text(
                 "pub use openbim_icdd::*;\npub struct Owned;\n", encoding="utf-8"

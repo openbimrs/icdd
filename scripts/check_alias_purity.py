@@ -70,6 +70,18 @@ expected_source_path = normalized(ROOT / "icdd/src/lib.rs")
 if source_path != expected_source_path:
     fail(f"icdd library target must be {expected_source_path}, got {source_path}")
 
+source_root = ROOT / "icdd/src"
+source_entries = {
+    path.relative_to(source_root)
+    for path in source_root.rglob("*")
+    if path.is_file() or path.is_symlink()
+}
+if source_entries != {Path("lib.rs")}:
+    fail(
+        "icdd source tree must contain only src/lib.rs, got "
+        + ", ".join(str(path) for path in sorted(source_entries))
+    )
+
 meaningful_lines = [
     line.strip()
     for line in source_path.read_text(encoding="utf-8").splitlines()

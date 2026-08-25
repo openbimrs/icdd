@@ -15,8 +15,8 @@ and this project follows [Semantic Versioning](https://semver.org/).
 - Added standalone documentation, CI, package verification, and an executable
   semantic purity gate for the `icdd` alias package. The gate resolves Cargo's
   active target and dependency metadata, enforces lockstep package versions,
-  and rejects alternate implementation targets, target-gated dependencies,
-  dependency-level feature overrides, or textual manifest decoys.
+  and rejects alternate implementation targets or files, target-gated
+  dependencies, dependency-level feature overrides, or textual manifest decoys.
 
 ## [0.1.0] - 2026-08-24
 
