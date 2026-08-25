@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -27,9 +28,13 @@ def normalized(path: str | Path) -> Path:
     return Path(path).resolve()
 
 
+metadata_command = ["cargo", "metadata", "--no-deps", "--format-version", "1"]
+if os.environ.get("ICDD_ALIAS_ALLOW_UNLOCKED") != "1":
+    metadata_command.insert(2, "--locked")
+
 metadata = json.loads(
     subprocess.run(
-        ["cargo", "metadata", "--no-deps", "--format-version", "1"],
+        metadata_command,
         cwd=ROOT,
         check=True,
         capture_output=True,

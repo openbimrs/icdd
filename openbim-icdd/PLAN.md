@@ -29,7 +29,9 @@ must consume this crate rather than maintaining their own archive/RDF parser.
 - [x] `ICD-LINKSET` — decode linkset RDF graphs through `oxrdfxml`
 - [x] `ICD-WRITE` — deterministic generic ICDD writer using `zip` and
   `oxrdfxml`, including extension RDF payloads
-- [x] `ICD-SECURITY` — traversal-safe extraction and bounded RDF metadata reads
+- [x] `ICD-SECURITY` — canonical ZIP names, duplicate/case-fold rejection,
+  exact ontology membership, traversal/symlink-safe extraction, bounded archive,
+  metadata, RDF-triple, payload, linkset, and extraction resources
 - [x] `ICD-ROUNDTRIP` — preserve unknown RDF semantics and untouched payload bytes
 - [ ] `ICD-MIGRATE` — make Solibri depend on this crate and remove its generic
   ICDD module; make Poing use that canonical implementation path
@@ -56,10 +58,16 @@ must consume this crate rather than maintaining their own archive/RDF parser.
 
 ## Evidence
 
-- Standalone reader/writer/security/RDF/federation tests: 14 passed.
-- Existing Solibri ICDD oracle suite against the canonical crate: 6 passed.
+- Standalone reader/writer/security/RDF/federation tests: 23 passed, plus one
+  compile-tested doctest.
+- Existing Solibri ICDD oracle and reproducibility suites against the hardened
+  canonical crate: 6 passed both in the isolated harness and clean consumer.
 - Alias purity: baseline accepted and all mutations rejected.
-- Full `scripts/gate.sh`: code, Clippy, rustdoc, and mutation stages pass;
-  package verification requires the candidate to be committed and is run after
-  the frozen commit is created.
+- Full locked `scripts/gate.sh`: format, build, tests, Clippy, rustdoc, and
+  mutation stages pass. Packaging is intentionally pending the exact commit,
+  because Cargo refuses dirty package verification.
+- Follow-up security regressions cover namespace spoofing, uncontained members,
+  subtype-only links, undeclared/missing linksets, case-folded ZIP names,
+  noncanonical paths, source-binding mismatches, UUIDs, and affine/invertible
+  transforms.
 - Restricted ISO material was not copied into the repository.

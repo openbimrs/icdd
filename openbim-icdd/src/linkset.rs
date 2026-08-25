@@ -13,21 +13,38 @@
 use super::error::IcddError;
 use super::rdfgraph::RdfGraph;
 use super::schema::*;
+use super::vocab;
 
 /// Parse one link dataset file. `filename` is recorded on the returned
 /// [`LinkSet`] for provenance.
 pub fn parse_linkset(filename: &str, bytes: &[u8]) -> Result<LinkSet, IcddError> {
     let g = RdfGraph::parse(bytes)?;
 
+    let mut link_ids = Vec::new();
+    for link_type in [
+        "Link",
+        "BinaryLink",
+        "DirectedLink",
+        "DirectedBinaryLink",
+        "Directed1toNLink",
+        "Directed1ToNLink",
+    ] {
+        for id in g.subjects_of_type_ns(vocab::LS, link_type) {
+            if !link_ids.contains(&id) {
+                link_ids.push(id);
+            }
+        }
+    }
+
     let mut links = Vec::new();
-    for link_id in g.subjects_of_type("Link") {
+    for link_id in link_ids {
         let from: Vec<String> = g
-            .objects_local(link_id, "hasFromLinkElement")
+            .objects_ns(link_id, vocab::LS, "hasFromLinkElement")
             .iter()
             .filter_map(|o| o.as_resource().map(str::to_string))
             .collect();
         let to: Vec<String> = g
-            .objects_local(link_id, "hasToLinkElement")
+            .objects_ns(link_id, vocab::LS, "hasToLinkElement")
             .iter()
             .filter_map(|o| o.as_resource().map(str::to_string))
             .collect();
@@ -36,7 +53,7 @@ pub fn parse_linkset(filename: &str, bytes: &[u8]) -> Result<LinkSet, IcddError>
         // often assert ONLY the from/to sub-properties (which are sub-properties
         // of hasLinkElement but not materialized), so union all three.
         let mut elem_ids: Vec<String> = g
-            .objects_local(link_id, "hasLinkElement")
+            .objects_ns(link_id, vocab::LS, "hasLinkElement")
             .iter()
             .filter_map(|o| o.as_resource().map(str::to_string))
             .collect();
@@ -48,9 +65,14 @@ pub fn parse_linkset(filename: &str, bytes: &[u8]) -> Result<LinkSet, IcddError>
 
         let directed = !from.is_empty()
             || !to.is_empty()
-            || g.has_type(link_id, "DirectedLink")
-            || g.has_type(link_id, "DirectedBinaryLink")
-            || g.has_type(link_id, "Directed1toNLink");
+            || [
+                "DirectedLink",
+                "DirectedBinaryLink",
+                "Directed1toNLink",
+                "Directed1ToNLink",
+            ]
+            .iter()
+            .any(|kind| g.has_type_ns(link_id, vocab::LS, kind));
 
         let elements = elem_ids
             .iter()
@@ -73,9 +95,9 @@ pub fn parse_linkset(filename: &str, bytes: &[u8]) -> Result<LinkSet, IcddError>
 }
 
 fn parse_link_element(g: &RdfGraph, eid: &str) -> LinkElement {
-    let document_id = g.resource(eid, "hasDocument");
+    let document_id = g.resource_ns(eid, vocab::LS, "hasDocument");
     let identifier = g
-        .resource(eid, "hasIdentifier")
+        .resource_ns(eid, vocab::LS, "hasIdentifier")
         .and_then(|id_node| parse_identifier(g, &id_node));
     LinkElement {
         id: eid.to_string(),
@@ -85,31 +107,33 @@ fn parse_link_element(g: &RdfGraph, eid: &str) -> LinkElement {
 }
 
 fn parse_identifier(g: &RdfGraph, id_node: &str) -> Option<ElementIdentifier> {
-    // Dispatch on the identifier's rdf:type; tolerate the value being present
-    // even if the type triple is missing (fall back by which predicate exists).
-    if g.has_type(id_node, "StringBasedIdentifier") || has_local(g, id_node, "identifier") {
+    if g.has_type_ns(id_node, vocab::LS, "StringBasedIdentifier")
+        || has_ls(g, id_node, "identifier")
+    {
         return Some(ElementIdentifier::String {
-            value: g.literal(id_node, "identifier").unwrap_or_default(),
-            field: g.literal(id_node, "identifierField"),
+            value: g
+                .literal_ns(id_node, vocab::LS, "identifier")
+                .unwrap_or_default(),
+            field: g.literal_ns(id_node, vocab::LS, "identifierField"),
         });
     }
-    if g.has_type(id_node, "URIBasedIdentifier") || has_local(g, id_node, "uri") {
+    if g.has_type_ns(id_node, vocab::LS, "URIBasedIdentifier") || has_ls(g, id_node, "uri") {
         return Some(ElementIdentifier::Uri {
-            uri: g.literal(id_node, "uri").unwrap_or_default(),
+            uri: g.literal_ns(id_node, vocab::LS, "uri").unwrap_or_default(),
         });
     }
-    if g.has_type(id_node, "QueryBasedIdentifier")
-        || has_local(g, id_node, "queryExpression")
-        || has_local(g, id_node, "queryLanguage")
+    if g.has_type_ns(id_node, vocab::LS, "QueryBasedIdentifier")
+        || has_ls(g, id_node, "queryExpression")
+        || has_ls(g, id_node, "queryLanguage")
     {
         return Some(ElementIdentifier::Query {
-            language: g.literal(id_node, "queryLanguage"),
-            expression: g.literal(id_node, "queryExpression"),
+            language: g.literal_ns(id_node, vocab::LS, "queryLanguage"),
+            expression: g.literal_ns(id_node, vocab::LS, "queryExpression"),
         });
     }
     None
 }
 
-fn has_local(g: &RdfGraph, subject: &str, pred_local: &str) -> bool {
-    !g.objects_local(subject, pred_local).is_empty()
+fn has_ls(g: &RdfGraph, subject: &str, pred_local: &str) -> bool {
+    !g.objects_ns(subject, vocab::LS, pred_local).is_empty()
 }

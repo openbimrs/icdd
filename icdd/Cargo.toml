@@ -10,6 +10,7 @@ readme = "README.md"
 description = "ISO 21597 ICDD alias: re-exports openbim-icdd under the standard's common name."
 keywords = ["bim", "openbim", "aec"]
 categories = ["parser-implementations", "data-structures"]
+include = ["Cargo.toml", "LICENSE", "README.md", "src/lib.rs"]
 
 [dependencies]
 # Exact pin prevents the alias and canonical package from exposing different

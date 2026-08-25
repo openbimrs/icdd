@@ -10,6 +10,9 @@ pub use oxrdf::{BlankNode, Literal, NamedNode, NamedOrBlankNode, Term, Triple};
 
 use crate::IcddError;
 
+/// Maximum triples accepted from one RDF/XML graph.
+pub const MAX_RDF_TRIPLES: usize = 1_000_000;
+
 /// Deterministic RDF/XML serialization settings.
 #[derive(Debug, Clone, Default)]
 pub struct RdfXmlOptions {
@@ -42,10 +45,16 @@ impl RdfXmlOptions {
 /// Parse a complete RDF/XML document without discarding unknown triples,
 /// literal datatypes, language tags, or blank nodes.
 pub fn parse_rdf_xml(reader: impl Read) -> Result<Vec<Triple>, IcddError> {
-    oxrdfxml::RdfXmlParser::new()
-        .for_reader(reader)
-        .map(|triple| triple.map_err(|error| IcddError::Rdf(error.to_string())))
-        .collect()
+    let mut triples = Vec::new();
+    for triple in oxrdfxml::RdfXmlParser::new().for_reader(reader) {
+        if triples.len() == MAX_RDF_TRIPLES {
+            return Err(IcddError::NotConformant(format!(
+                "RDF graph exceeds the {MAX_RDF_TRIPLES}-triple limit"
+            )));
+        }
+        triples.push(triple.map_err(|error| IcddError::Rdf(error.to_string()))?);
+    }
+    Ok(triples)
 }
 
 /// Serialize an RDF graph with Oxigraph's RDF/XML serializer.

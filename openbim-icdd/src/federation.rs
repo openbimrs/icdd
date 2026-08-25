@@ -3,6 +3,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use serde::Serialize;
+use uuid::Uuid;
 
 use crate::rdf::{Literal, NamedNode, Triple};
 use crate::rdfgraph::RdfGraph;
@@ -20,7 +21,7 @@ const ONTOLOGY_RDF: &str = "poing-federation-ontology.rdf";
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct PoingFederationManifest {
     pub id: String,
-    pub uuid: String,
+    pub uuid: Uuid,
     pub name: String,
     pub primary_member_id: String,
     pub coordinate_reference_system: Option<String>,
@@ -31,7 +32,7 @@ pub struct PoingFederationManifest {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct PoingFederationMember {
     pub id: String,
-    pub uuid: String,
+    pub uuid: Uuid,
     pub name: String,
     pub source: String,
     pub industry_domain: Option<String>,
@@ -62,12 +63,34 @@ impl FederationIcddPayload<'_> {
     }
 }
 
-fn validate_manifest(manifest: &PoingFederationManifest) -> Result<(), IcddError> {
-    if manifest.id.trim().is_empty()
-        || manifest.uuid.trim().is_empty()
-        || manifest.name.trim().is_empty()
+fn validate_transform(transform: &[f64; 16]) -> Result<(), IcddError> {
+    if transform.iter().any(|value| !value.is_finite()) {
+        return Err(invalid(
+            "federation member transform must contain finite numbers",
+        ));
+    }
+    let tolerance = 1e-12;
+    if transform[12].abs() > tolerance
+        || transform[13].abs() > tolerance
+        || transform[14].abs() > tolerance
+        || (transform[15] - 1.0).abs() > tolerance
     {
-        return Err(invalid("federation id, UUID, and name must not be empty"));
+        return Err(invalid(
+            "federation member transform must be an affine 4x4 matrix",
+        ));
+    }
+    let determinant = transform[0] * (transform[5] * transform[10] - transform[9] * transform[6])
+        - transform[4] * (transform[1] * transform[10] - transform[9] * transform[2])
+        + transform[8] * (transform[1] * transform[6] - transform[5] * transform[2]);
+    if determinant.abs() <= tolerance {
+        return Err(invalid("federation member transform must be invertible"));
+    }
+    Ok(())
+}
+
+fn validate_manifest(manifest: &PoingFederationManifest) -> Result<(), IcddError> {
+    if manifest.id.trim().is_empty() || manifest.name.trim().is_empty() {
+        return Err(invalid("federation id and name must not be empty"));
     }
     if manifest.members.is_empty() {
         return Err(invalid("federation must contain at least one member"));
@@ -76,7 +99,6 @@ fn validate_manifest(manifest: &PoingFederationManifest) -> Result<(), IcddError
     let mut uuids = BTreeSet::new();
     for member in &manifest.members {
         if member.id.trim().is_empty()
-            || member.uuid.trim().is_empty()
             || member.name.trim().is_empty()
             || member.source.trim().is_empty()
         {
@@ -84,14 +106,10 @@ fn validate_manifest(manifest: &PoingFederationManifest) -> Result<(), IcddError
                 "federation member identity fields must not be empty",
             ));
         }
-        if !ids.insert(member.id.as_str()) || !uuids.insert(member.uuid.as_str()) {
+        if !ids.insert(member.id.as_str()) || !uuids.insert(member.uuid) {
             return Err(invalid("federation member ids and UUIDs must be unique"));
         }
-        if member.transform.iter().any(|value| !value.is_finite()) {
-            return Err(invalid(
-                "federation member transform must contain finite numbers",
-            ));
-        }
+        validate_transform(&member.transform)?;
     }
     if !ids.contains(manifest.primary_member_id.as_str()) {
         return Err(invalid("primary federation member does not exist"));
@@ -113,10 +131,17 @@ fn validate_bindings<'a>(
         }
     }
     for member in &manifest.members {
-        if !result.contains_key(member.id.as_str()) {
+        let payload = result
+            .get(member.id.as_str())
+            .ok_or_else(|| invalid(&format!("missing payload binding for {}", member.id)))?;
+        let bound_source = match payload {
+            FederationIcddPayload::Internal { filename, .. } => *filename,
+            FederationIcddPayload::External { url, .. } => *url,
+        };
+        if member.source != bound_source {
             return Err(invalid(&format!(
-                "missing payload binding for {}",
-                member.id
+                "federation member {} source {:?} does not match bound source {:?}",
+                member.id, member.source, bound_source
             )));
         }
     }
@@ -214,7 +239,7 @@ fn federation_graph(manifest: &PoingFederationManifest) -> Result<Vec<Triple>, I
     let mut triples = vec![
         resource(&root, RDF_TYPE, &format!("{POING}Federation"))?,
         literal(&root, &format!("{POING}id"), &manifest.id)?,
-        literal(&root, &format!("{POING}uuid"), &manifest.uuid)?,
+        literal(&root, &format!("{POING}uuid"), manifest.uuid.to_string())?,
         literal(&root, &format!("{POING}name"), &manifest.name)?,
         literal(
             &root,
@@ -231,7 +256,11 @@ fn federation_graph(manifest: &PoingFederationManifest) -> Result<Vec<Triple>, I
             resource(&member_node, RDF_TYPE, &format!("{POING}Member"))?,
             literal(&member_node, &format!("{POING}order"), order.to_string())?,
             literal(&member_node, &format!("{POING}id"), &member.id)?,
-            literal(&member_node, &format!("{POING}uuid"), &member.uuid)?,
+            literal(
+                &member_node,
+                &format!("{POING}uuid"),
+                member.uuid.to_string(),
+            )?,
             literal(&member_node, &format!("{POING}name"), &member.name)?,
             literal(&member_node, &format!("{POING}source"), &member.source)?,
             literal(
@@ -313,7 +342,7 @@ pub fn write_poing_federation_icdd(
 
 /// Parse the portable Poing federation extension from an ICDD container.
 pub fn parse_poing_federation_icdd(bytes: &[u8]) -> Result<PoingFederationManifest, IcddError> {
-    let mut container = IcddContainer::open_bytes(bytes.to_vec())?;
+    let mut container = IcddContainer::open(std::io::Cursor::new(bytes))?;
     let document = container
         .index()
         .documents
@@ -321,15 +350,28 @@ pub fn parse_poing_federation_icdd(bytes: &[u8]) -> Result<PoingFederationManife
         .find(|document| document.internal_path() == Some(FEDERATION_RDF))
         .cloned()
         .ok_or_else(|| invalid("ICDD has no Poing federation metadata document"))?;
+    let declared_sources = container
+        .index()
+        .documents
+        .iter()
+        .filter_map(|document| match &document.kind {
+            crate::DocumentKind::Internal { filename } => Some(filename.clone()),
+            crate::DocumentKind::External { url } => Some(url.clone()),
+            crate::DocumentKind::Folder { .. } => None,
+        })
+        .collect::<BTreeSet<_>>();
     let rdf = container.payload_bytes(&document)?;
     let graph = RdfGraph::parse(rdf.as_slice())?;
-    let root = graph
-        .subjects_of_type("Federation")
-        .into_iter()
-        .next()
-        .ok_or_else(|| invalid("Poing federation RDF has no Federation subject"))?;
+    let roots = graph.subjects_of_type_ns(POING, "Federation");
+    if roots.len() != 1 {
+        return Err(invalid(&format!(
+            "Poing federation RDF must contain exactly one Federation subject, found {}",
+            roots.len()
+        )));
+    }
+    let root = roots[0];
     let mut members = graph
-        .subjects_of_type("Member")
+        .subjects_of_type_ns(POING, "Member")
         .into_iter()
         .map(|subject| parse_member(&graph, subject))
         .collect::<Result<Vec<_>, _>>()?;
@@ -341,13 +383,21 @@ pub fn parse_poing_federation_icdd(bytes: &[u8]) -> Result<PoingFederationManife
     }
     let manifest = PoingFederationManifest {
         id: required(&graph, root, "id")?,
-        uuid: required(&graph, root, "uuid")?,
+        uuid: parse_uuid(&required(&graph, root, "uuid")?)?,
         name: required(&graph, root, "name")?,
         primary_member_id: required(&graph, root, "primaryMemberId")?,
-        coordinate_reference_system: graph.literal(root, "crs"),
+        coordinate_reference_system: graph.literal_ns(root, POING, "crs"),
         members: members.into_iter().map(|(_, member)| member).collect(),
     };
     validate_manifest(&manifest)?;
+    for member in &manifest.members {
+        if !declared_sources.contains(&member.source) {
+            return Err(invalid(&format!(
+                "federation member {} source {:?} is not declared by Index.rdf",
+                member.id, member.source
+            )));
+        }
+    }
     Ok(manifest)
 }
 
@@ -362,13 +412,13 @@ fn parse_member(
         order,
         PoingFederationMember {
             id: required(graph, subject, "id")?,
-            uuid: required(graph, subject, "uuid")?,
+            uuid: parse_uuid(&required(graph, subject, "uuid")?)?,
             name: required(graph, subject, "name")?,
             source: required(graph, subject, "source")?,
-            industry_domain: graph.literal(subject, "industryDomain"),
-            schema: graph.literal(subject, "schema"),
-            content_hash: graph.literal(subject, "contentHash"),
-            coordinate_reference_system: graph.literal(subject, "crs"),
+            industry_domain: graph.literal_ns(subject, POING, "industryDomain"),
+            schema: graph.literal_ns(subject, POING, "schema"),
+            content_hash: graph.literal_ns(subject, POING, "contentHash"),
+            coordinate_reference_system: graph.literal_ns(subject, POING, "crs"),
             transform: parse_transform(&required(graph, subject, "transform")?)?,
         },
     ))
@@ -383,17 +433,17 @@ fn parse_transform(value: &str) -> Result<[f64; 16], IcddError> {
     let transform: [f64; 16] = values
         .try_into()
         .map_err(|_| invalid("Poing member transform must contain exactly 16 numbers"))?;
-    if transform.iter().any(|value| !value.is_finite()) {
-        return Err(invalid(
-            "Poing member transform must contain finite numbers",
-        ));
-    }
+    validate_transform(&transform)?;
     Ok(transform)
+}
+
+fn parse_uuid(value: &str) -> Result<Uuid, IcddError> {
+    Uuid::parse_str(value).map_err(|_| invalid("Poing UUID is not a valid UUID"))
 }
 
 fn required(graph: &RdfGraph, subject: &str, predicate: &str) -> Result<String, IcddError> {
     graph
-        .literal(subject, predicate)
+        .literal_ns(subject, POING, predicate)
         .ok_or_else(|| invalid(&format!("Poing federation RDF is missing {predicate}")))
 }
 

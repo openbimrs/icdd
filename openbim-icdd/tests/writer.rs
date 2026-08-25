@@ -5,6 +5,8 @@ const INDEX: &str = r#"<rdf:RDF
   xmlns:ct="https://standards.iso.org/iso/21597/-1/ed-1/en/Container#">
   <ct:ContainerDescription rdf:about="urn:test:container">
     <ct:conformanceIndicator>ICDD-Part1-Container</ct:conformanceIndicator>
+    <ct:containsDocument rdf:resource="urn:test:document"/>
+    <ct:containsLinkset rdf:resource="urn:test:linkset"/>
   </ct:ContainerDescription>
   <ct:InternalDocument rdf:about="urn:test:document">
     <ct:filename>model.ifc</ct:filename>
@@ -55,12 +57,20 @@ fn builder_rejects_unsafe_or_duplicate_paths() {
         .unwrap()
         .add_payload("../escape.ifc", b"x")
         .is_err());
+    assert!(IcddArchiveBuilder::new(INDEX.as_bytes())
+        .unwrap()
+        .add_payload("nested\\model.ifc", b"x")
+        .is_err());
+    assert!(IcddArchiveBuilder::new(INDEX.as_bytes())
+        .unwrap()
+        .add_payload("/model.ifc", b"x")
+        .is_err());
 
     let duplicate = IcddArchiveBuilder::new(INDEX.as_bytes())
         .unwrap()
         .add_payload("model.ifc", b"one")
         .unwrap()
-        .add_payload("model.ifc", b"two");
+        .add_payload("MODEL.ifc", b"two");
     assert!(duplicate.is_err());
 }
 

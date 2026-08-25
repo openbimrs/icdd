@@ -10,6 +10,8 @@ const INDEX: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
   <ct:ContainerDescription rdf:about="https://example.test/container">
     <ct:conformanceIndicator>ICDD-Part1-Container</ct:conformanceIndicator>
     <ct:description>Synthetic container</ct:description>
+    <ct:containsDocument rdf:resource="https://example.test/document/model"/>
+    <ct:containsLinkset rdf:resource="https://example.test/linkset/main"/>
   </ct:ContainerDescription>
   <ct:InternalDocument rdf:about="https://example.test/document/model">
     <ct:filename>model.ifc</ct:filename>
@@ -42,6 +44,10 @@ const LINKSET: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
 "#;
 
 fn synthetic_icdd() -> Vec<u8> {
+    archive(INDEX, Some(LINKSET))
+}
+
+fn archive(index: &str, linkset: Option<&str>) -> Vec<u8> {
     let cursor = Cursor::new(Vec::new());
     let mut zip = ZipWriter::new(cursor);
     let options = SimpleFileOptions::default();
@@ -53,14 +59,16 @@ fn synthetic_icdd() -> Vec<u8> {
         zip.add_directory(directory, options).unwrap();
     }
     zip.start_file("Index.rdf", options).unwrap();
-    zip.write_all(INDEX.as_bytes()).unwrap();
+    zip.write_all(index.as_bytes()).unwrap();
     zip.start_file("Payload documents/model.ifc", options)
         .unwrap();
     zip.write_all(b"ISO-10303-21;\nEND-ISO-10303-21;\n")
         .unwrap();
-    zip.start_file("Payload triples/links.rdf", options)
-        .unwrap();
-    zip.write_all(LINKSET.as_bytes()).unwrap();
+    if let Some(linkset) = linkset {
+        zip.start_file("Payload triples/links.rdf", options)
+            .unwrap();
+        zip.write_all(linkset.as_bytes()).unwrap();
+    }
     zip.finish().unwrap().into_inner()
 }
 
@@ -77,6 +85,12 @@ fn reads_index_linksets_and_payloads_through_the_canonical_crate() {
         container.payload_bytes(&document).unwrap(),
         b"ISO-10303-21;\nEND-ISO-10303-21;\n"
     );
+    let mut streamed = Vec::new();
+    assert_eq!(
+        container.copy_payload_to(&document, &mut streamed).unwrap(),
+        32
+    );
+    assert_eq!(streamed, b"ISO-10303-21;\nEND-ISO-10303-21;\n");
 
     let links = &container.linksets()[0].links;
     assert_eq!(links.len(), 1);
@@ -86,6 +100,48 @@ fn reads_index_linksets_and_payloads_through_the_canonical_crate() {
         Some(ElementIdentifier::String { ref value, .. })
             if value == "3vB2YO$MX4xv5uCqZZG05x"
     ));
+}
+
+#[test]
+fn subtype_only_directed_links_are_preserved() {
+    let subtype = LINKSET
+        .replace("<ls:Link rdf:about", "<ls:DirectedBinaryLink rdf:about")
+        .replace("</ls:Link>", "</ls:DirectedBinaryLink>");
+    let container = IcddContainer::open_bytes(archive(INDEX, Some(&subtype))).unwrap();
+    assert_eq!(container.linksets()[0].links.len(), 1);
+    assert!(container.linksets()[0].links[0].directed);
+}
+
+#[test]
+fn uncontained_and_spoof_namespaced_members_are_not_typed() {
+    let uncontained = INDEX.replace(
+        "    <ct:containsDocument rdf:resource=\"https://example.test/document/model\"/>\n",
+        "",
+    );
+    let container = IcddContainer::open_bytes(archive(&uncontained, Some(LINKSET))).unwrap();
+    assert!(container.index().documents.is_empty());
+
+    let spoofed = INDEX.replace(
+        "https://standards.iso.org/iso/21597/-1/ed-1/en/Container#",
+        "https://vendor.example/spoof#",
+    );
+    assert!(IcddContainer::open_bytes(archive(&spoofed, Some(LINKSET))).is_err());
+}
+
+#[test]
+fn declared_linksets_must_exist_and_undeclared_ones_are_not_substituted() {
+    assert!(IcddContainer::open_bytes(archive(INDEX, None)).is_err());
+    let undeclared = INDEX
+        .replace(
+            "    <ct:containsLinkset rdf:resource=\"https://example.test/linkset/main\"/>\n",
+            "",
+        )
+        .replace(
+            "  <ct:Linkset rdf:about=\"https://example.test/linkset/main\">\n    <ct:filename>links.rdf</ct:filename>\n    <ct:name>Main links</ct:name>\n  </ct:Linkset>\n",
+            "",
+        );
+    let container = IcddContainer::open_bytes(archive(&undeclared, Some(LINKSET))).unwrap();
+    assert!(container.linksets().is_empty());
 }
 
 #[test]

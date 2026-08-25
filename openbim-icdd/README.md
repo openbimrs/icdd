@@ -5,8 +5,9 @@ Document Delivery (ICDD).
 
 The crate reads ZIP containers lazily, decodes typed `Index.rdf` and linkset
 views, exposes raw RDF/XML parse/serialize APIs for extensions, writes
-deterministic containers, and safely extracts opaque payloads. It uses the
-maintained `zip`, `oxrdfxml`, and `oxrdf` crates directly.
+deterministic containers, streams large payloads, and extracts opaque payloads
+with traversal, symlink, and expansion guards. It uses the maintained `zip`,
+`oxrdfxml`, and `oxrdf` crates directly.
 
 `0.2.0` is the first functional release. Complete normative ISO validation and
 byte-identical arbitrary archive rewriting are not yet claimed. See the

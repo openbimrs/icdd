@@ -64,6 +64,47 @@ fn safe_relative_payload_path(path: &str) -> Result<std::path::PathBuf, IcddErro
     Ok(safe)
 }
 
+fn open_safe_payload_target(
+    root: &Path,
+    relative: &Path,
+) -> Result<(File, std::path::PathBuf), IcddError> {
+    std::fs::create_dir_all(root)?;
+    let root_metadata = std::fs::symlink_metadata(root)?;
+    if root_metadata.file_type().is_symlink() || !root_metadata.is_dir() {
+        return Err(IcddError::NotConformant(format!(
+            "extraction root is not a real directory: {}",
+            root.display()
+        )));
+    }
+
+    let mut current = root.to_path_buf();
+    if let Some(parent) = relative.parent() {
+        for component in parent.components() {
+            current.push(component.as_os_str());
+            match std::fs::symlink_metadata(&current) {
+                Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
+                    return Err(IcddError::NotConformant(format!(
+                        "payload extraction path crosses a non-directory or symlink: {}",
+                        current.display()
+                    )));
+                }
+                Ok(_) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    std::fs::create_dir(&current)?;
+                }
+                Err(error) => return Err(error.into()),
+            }
+        }
+    }
+
+    let target = root.join(relative);
+    let file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&target)?;
+    Ok((file, target))
+}
+
 impl IcddContainer<Cursor<Vec<u8>>> {
     /// Open a container from an in-memory byte buffer (e.g. an HTTP upload).
     pub fn open_bytes(bytes: Vec<u8>) -> Result<Self, IcddError> {
@@ -80,32 +121,47 @@ impl<R: Read + Seek> IcddContainer<R> {
         // Parse the root Index.rdf (Container ontology).
         let index_bytes = zip.index_bytes()?;
         let index = index::parse_index(&index_bytes)?;
-
-        // Parse every linkset. Prefer the index's referenced filenames; union
-        // with any *.rdf actually present under Payload triples/ (some real
-        // containers under-list them).
-        let mut linkset_paths: Vec<String> = index
-            .linkset_files
-            .iter()
-            .filter_map(|l| l.filename.clone())
-            .collect();
-        for p in zip.linkset_paths() {
-            // p is a full archive path; store the payload-triples-relative name.
-            let rel = p
-                .strip_prefix(&format!("{}/", container::PAYLOAD_TRIPLES_DIR))
-                .unwrap_or(&p)
-                .to_string();
-            if !linkset_paths.iter().any(|x| x == &rel || x == &p) {
-                linkset_paths.push(rel);
+        for document in &index.documents {
+            if let Some(filename) = document.internal_path() {
+                zip.validate_payload_reference(filename)?;
             }
         }
 
+        // Parse exactly the linksets declared by the container root. Undeclared
+        // RDF files remain accessible as raw entries but cannot silently become
+        // typed ISO members.
+        let linkset_paths: Vec<String> = index
+            .linkset_files
+            .iter()
+            .map(|linkset| {
+                linkset.filename.clone().ok_or_else(|| {
+                    IcddError::NotConformant(format!("linkset {} has no ct:filename", linkset.id))
+                })
+            })
+            .collect::<Result<_, _>>()?;
+
+        if linkset_paths.len() > container::MAX_LINKSET_COUNT {
+            return Err(IcddError::NotConformant(format!(
+                "container declares {} linksets, exceeding the {}-linkset limit",
+                linkset_paths.len(),
+                container::MAX_LINKSET_COUNT
+            )));
+        }
+
         let mut linksets = Vec::new();
+        let mut total_rdf_bytes = index_bytes.len() as u64;
         for name in linkset_paths {
-            match zip.linkset_bytes(&name) {
-                Ok(bytes) => linksets.push(linkset::parse_linkset(&name, &bytes)?),
-                Err(_) => { /* referenced-but-absent linkset: skip, stay lenient */ }
+            let bytes = zip.linkset_bytes(&name)?;
+            total_rdf_bytes = total_rdf_bytes
+                .checked_add(bytes.len() as u64)
+                .ok_or_else(|| IcddError::NotConformant("total RDF size overflow".into()))?;
+            if total_rdf_bytes > container::MAX_TOTAL_RDF_BYTES {
+                return Err(IcddError::NotConformant(format!(
+                    "container RDF metadata exceeds the {}-byte total limit",
+                    container::MAX_TOTAL_RDF_BYTES
+                )));
             }
+            linksets.push(linkset::parse_linkset(&name, &bytes)?);
         }
 
         Ok(IcddContainer {
@@ -150,7 +206,13 @@ impl<R: Read + Seek> IcddContainer<R> {
         self.index
             .documents
             .iter()
-            .filter(|d| d.is_ifc() && !d.requested && d.internal_path().is_some())
+            .filter(|document| {
+                document.is_ifc()
+                    && !document.requested
+                    && document
+                        .internal_path()
+                        .is_some_and(|path| self.zip.contains_payload(path))
+            })
             .collect()
     }
 
@@ -171,6 +233,21 @@ impl<R: Read + Seek> IcddContainer<R> {
         self.zip.payload_bytes(path)
     }
 
+    /// Stream an internal payload document without materializing it in memory.
+    pub fn copy_payload_to(
+        &mut self,
+        doc: &Document,
+        writer: &mut impl std::io::Write,
+    ) -> Result<u64, IcddError> {
+        let path = doc.internal_path().ok_or_else(|| {
+            IcddError::NotConformant(format!(
+                "document {} is not an internal document (no in-container bytes)",
+                doc.id
+            ))
+        })?;
+        self.zip.copy_payload_to(path, writer)
+    }
+
     /// Extract every internal payload document to `dir`, preserving relative
     /// paths. Returns the list of `(document, written_path)` pairs.
     pub fn extract_payloads(
@@ -185,13 +262,29 @@ impl<R: Read + Seek> IcddContainer<R> {
             .filter_map(|d| d.internal_path().map(|p| (d.id.clone(), p.to_string())))
             .collect();
         let mut out = Vec::new();
+        let mut total_extracted = 0_u64;
         for (id, rel) in docs {
-            let bytes = self.zip.payload_bytes(&rel)?;
-            let target = dir.join(safe_relative_payload_path(&rel)?);
-            if let Some(parent) = target.parent() {
-                std::fs::create_dir_all(parent)?;
+            let relative = safe_relative_payload_path(&rel)?;
+            let (mut file, target) = open_safe_payload_target(dir, &relative)?;
+            let copied = match self.zip.copy_payload_to(&rel, &mut file) {
+                Ok(copied) => copied,
+                Err(error) => {
+                    drop(file);
+                    let _ = std::fs::remove_file(&target);
+                    return Err(error);
+                }
+            };
+            total_extracted = total_extracted.checked_add(copied).ok_or_else(|| {
+                IcddError::NotConformant("total extracted payload size overflow".into())
+            })?;
+            if total_extracted > container::MAX_TOTAL_EXTRACTED_BYTES {
+                drop(file);
+                let _ = std::fs::remove_file(&target);
+                return Err(IcddError::NotConformant(format!(
+                    "extracted payloads exceed the {}-byte total limit",
+                    container::MAX_TOTAL_EXTRACTED_BYTES
+                )));
             }
-            std::fs::write(&target, bytes)?;
             out.push((id, target));
         }
         Ok(out)

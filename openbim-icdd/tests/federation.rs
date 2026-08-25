@@ -6,13 +6,13 @@ use openbim_icdd::{
 fn manifest() -> PoingFederationManifest {
     PoingFederationManifest {
         id: "campus".into(),
-        uuid: "019c97c5-a8f4-7000-8000-000000000001".into(),
+        uuid: "019c97c5-a8f4-7000-8000-000000000001".parse().unwrap(),
         name: "Campus".into(),
         primary_member_id: "architecture".into(),
         coordinate_reference_system: Some("https://www.opengis.net/def/crs/EPSG/0/25832".into()),
         members: vec![PoingFederationMember {
             id: "architecture".into(),
-            uuid: "019c97c5-a8f4-7000-8000-000000000002".into(),
+            uuid: "019c97c5-a8f4-7000-8000-000000000002".parse().unwrap(),
             name: "Architecture".into(),
             source: "architecture.ifc".into(),
             industry_domain: Some("architecture".into()),
@@ -26,14 +26,18 @@ fn manifest() -> PoingFederationManifest {
     }
 }
 
-#[test]
-fn federation_extension_round_trips_through_canonical_icdd() {
-    let manifest = manifest();
-    let payloads = [FederationIcddPayload::Internal {
+fn payloads() -> [FederationIcddPayload<'static>; 1] {
+    [FederationIcddPayload::Internal {
         member_id: "architecture",
         filename: "architecture.ifc",
         bytes: b"ISO-10303-21;\nEND-ISO-10303-21;\n",
-    }];
+    }]
+}
+
+#[test]
+fn federation_extension_round_trips_through_canonical_icdd() {
+    let manifest = manifest();
+    let payloads = payloads();
     let first = write_poing_federation_icdd(&manifest, &payloads).unwrap();
     let second = write_poing_federation_icdd(&manifest, &payloads).unwrap();
     assert_eq!(first, second);
@@ -58,8 +62,31 @@ fn federation_writer_rejects_incomplete_bindings() {
 }
 
 #[test]
+fn federation_writer_rejects_source_binding_mismatch() {
+    let mut manifest = manifest();
+    manifest.members[0].source = "different.ifc".into();
+    let error = write_poing_federation_icdd(&manifest, &payloads())
+        .expect_err("member source must match its payload binding");
+    assert!(error.to_string().contains("does not match bound source"));
+}
+
+#[test]
 fn federation_writer_rejects_non_finite_transforms() {
     let mut manifest = manifest();
     manifest.members[0].transform[3] = f64::NAN;
-    assert!(write_poing_federation_icdd(&manifest, &[]).is_err());
+    assert!(write_poing_federation_icdd(&manifest, &payloads()).is_err());
+}
+
+#[test]
+fn federation_writer_rejects_non_affine_transforms() {
+    let mut manifest = manifest();
+    manifest.members[0].transform[12] = 1.0;
+    assert!(write_poing_federation_icdd(&manifest, &payloads()).is_err());
+}
+
+#[test]
+fn federation_writer_rejects_singular_transforms() {
+    let mut manifest = manifest();
+    manifest.members[0].transform[0] = 0.0;
+    assert!(write_poing_federation_icdd(&manifest, &payloads()).is_err());
 }

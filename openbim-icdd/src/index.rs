@@ -1,95 +1,101 @@
 //! Parse `Index.rdf` (the Container ontology) into [`ContainerIndex`].
 //!
-//! The Index dataset is a star graph rooted at a single `ct:ContainerDescription`
-//! which `ct:containsDocument` / `ct:containsLinkset` its members. Documents are
-//! `ct:InternalDocument` / `ct:ExternalDocument` / `ct:FolderDocument`, optionally
-//! also `ct:SecuredDocument` / `ct:EncryptedDocument` (a document individual can
-//! carry multiple `rdf:type`s — we fold the mix-ins into flags).
+//! The Index dataset is rooted at exactly one `ct:ContainerDescription`. Only
+//! resources reached through its `ct:containsDocument` and `ct:containsLinkset`
+//! edges become typed container members; extension subjects remain available in
+//! the raw RDF graph API but cannot spoof ISO members by local name.
+
+use std::collections::BTreeSet;
 
 use super::error::IcddError;
 use super::rdfgraph::RdfGraph;
 use super::schema::*;
+use super::vocab;
 
 /// Parse an `Index.rdf` byte stream into the neutral container index.
 pub fn parse_index(bytes: &[u8]) -> Result<ContainerIndex, IcddError> {
-    let g = RdfGraph::parse(bytes)?;
-
-    // The single ct:ContainerDescription.
-    let cd_id = g
-        .subjects_of_type("ContainerDescription")
-        .into_iter()
-        .next()
-        .ok_or_else(|| IcddError::NotConformant("Index.rdf has no ct:ContainerDescription".into()))?
-        .to_string();
+    let graph = RdfGraph::parse(bytes)?;
+    let roots = graph.subjects_of_type_ns(vocab::CT, "ContainerDescription");
+    if roots.len() != 1 {
+        return Err(IcddError::NotConformant(format!(
+            "Index.rdf must contain exactly one ct:ContainerDescription, found {}",
+            roots.len()
+        )));
+    }
+    let root = roots[0];
 
     let description = ContainerDescription {
-        id: cd_id.clone(),
-        conformance_indicator: g.literal(&cd_id, "conformanceIndicator"),
-        description: g.literal(&cd_id, "description"),
-        creation_date: g.literal(&cd_id, "creationDate"),
+        id: root.to_string(),
+        conformance_indicator: graph.literal_ns(root, vocab::CT, "conformanceIndicator"),
+        description: graph.literal_ns(root, vocab::CT, "description"),
+        creation_date: graph.literal_ns(root, vocab::CT, "creationDate"),
     };
 
-    // Documents: every subject that is a *Document type. A subject may carry
-    // several rdf:types (e.g. InternalDocument + SecuredDocument), so collect
-    // the union of the three concrete document classes.
-    let mut doc_ids: Vec<String> = Vec::new();
-    for t in ["InternalDocument", "ExternalDocument", "FolderDocument"] {
-        for s in g.subjects_of_type(t) {
-            if !doc_ids.iter().any(|d| d == s) {
-                doc_ids.push(s.to_string());
-            }
+    let document_ids = contained_resources(&graph, root, "containsDocument")?;
+    let mut documents = Vec::with_capacity(document_ids.len());
+    for id in document_ids {
+        let concrete_types = ["InternalDocument", "ExternalDocument", "FolderDocument"]
+            .into_iter()
+            .filter(|kind| graph.has_type_ns(&id, vocab::CT, kind))
+            .collect::<Vec<_>>();
+        if concrete_types.len() != 1 {
+            return Err(IcddError::NotConformant(format!(
+                "contained document {id} must have exactly one concrete ct:Document type"
+            )));
         }
-    }
-
-    let mut documents = Vec::with_capacity(doc_ids.len());
-    for id in doc_ids {
-        let kind = if let Some(fname) = g.literal(&id, "filename") {
-            DocumentKind::Internal { filename: fname }
-        } else if let Some(url) = g.literal(&id, "url") {
-            DocumentKind::External { url }
-        } else if let Some(folder) = g.literal(&id, "foldername") {
-            DocumentKind::Folder { foldername: folder }
-        } else if g.has_type(&id, "FolderDocument") {
-            // FolderDocument with the foldername on a different predicate spelling.
-            DocumentKind::Folder {
-                foldername: String::new(),
-            }
-        } else {
-            // Internal document whose filename we couldn't read — keep it as an
-            // empty internal reference rather than dropping it silently.
-            DocumentKind::Internal {
-                filename: String::new(),
-            }
+        let kind = match concrete_types[0] {
+            "InternalDocument" => DocumentKind::Internal {
+                filename: required_literal(&graph, &id, "filename")?,
+            },
+            "ExternalDocument" => DocumentKind::External {
+                url: required_literal(&graph, &id, "url")?,
+            },
+            "FolderDocument" => DocumentKind::Folder {
+                foldername: required_literal(&graph, &id, "foldername")?,
+            },
+            _ => unreachable!(),
         };
 
         let checksum = match (
-            g.literal(&id, "checksum"),
-            g.literal(&id, "checksumAlgorithm"),
+            graph.literal_ns(&id, vocab::CT, "checksum"),
+            graph.literal_ns(&id, vocab::CT, "checksumAlgorithm"),
         ) {
             (Some(value), Some(algorithm)) => Some(Checksum { algorithm, value }),
-            _ => None,
+            (None, None) => None,
+            _ => {
+                return Err(IcddError::NotConformant(format!(
+                    "document {id} must provide checksum and checksumAlgorithm together"
+                )))
+            }
         };
 
         documents.push(Document {
             id: id.clone(),
             kind,
-            name: g.literal(&id, "name"),
-            description: g.literal(&id, "description"),
-            filetype: g.literal(&id, "filetype"),
-            format: g.literal(&id, "format"),
+            name: graph.literal_ns(&id, vocab::CT, "name"),
+            description: graph.literal_ns(&id, vocab::CT, "description"),
+            filetype: graph.literal_ns(&id, vocab::CT, "filetype"),
+            format: graph.literal_ns(&id, vocab::CT, "format"),
             checksum,
-            encrypted: g.has_type(&id, "EncryptedDocument"),
-            requested: g.bool_true(&id, "requested"),
+            encrypted: graph.has_type_ns(&id, vocab::CT, "EncryptedDocument"),
+            requested: graph
+                .literal_ns(&id, vocab::CT, "requested")
+                .is_some_and(|value| value.eq_ignore_ascii_case("true")),
         });
     }
 
-    // Linkset references.
-    let mut linkset_files = Vec::new();
-    for id in g.subjects_of_type("Linkset") {
+    let linkset_ids = contained_resources(&graph, root, "containsLinkset")?;
+    let mut linkset_files = Vec::with_capacity(linkset_ids.len());
+    for id in linkset_ids {
+        if !graph.has_type_ns(&id, vocab::CT, "Linkset") {
+            return Err(IcddError::NotConformant(format!(
+                "contained linkset {id} is not a ct:Linkset"
+            )));
+        }
         linkset_files.push(LinksetRef {
-            id: id.to_string(),
-            filename: g.literal(id, "filename"),
-            name: g.literal(id, "name"),
+            id: id.clone(),
+            filename: Some(required_literal(&graph, &id, "filename")?),
+            name: graph.literal_ns(&id, vocab::CT, "name"),
         });
     }
 
@@ -98,4 +104,35 @@ pub fn parse_index(bytes: &[u8]) -> Result<ContainerIndex, IcddError> {
         documents,
         linkset_files,
     })
+}
+
+fn contained_resources(
+    graph: &RdfGraph,
+    root: &str,
+    predicate: &str,
+) -> Result<Vec<String>, IcddError> {
+    let objects = graph.objects_ns(root, vocab::CT, predicate);
+    let mut seen = BTreeSet::new();
+    let mut resources = Vec::with_capacity(objects.len());
+    for object in objects {
+        let resource = object.as_resource().ok_or_else(|| {
+            IcddError::NotConformant(format!("ct:{predicate} must reference a resource"))
+        })?;
+        if !seen.insert(resource.to_string()) {
+            return Err(IcddError::NotConformant(format!(
+                "ct:{predicate} contains duplicate resource {resource}"
+            )));
+        }
+        resources.push(resource.to_string());
+    }
+    Ok(resources)
+}
+
+fn required_literal(graph: &RdfGraph, subject: &str, predicate: &str) -> Result<String, IcddError> {
+    graph
+        .literal_ns(subject, vocab::CT, predicate)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            IcddError::NotConformant(format!("{subject} is missing non-empty ct:{predicate}"))
+        })
 }

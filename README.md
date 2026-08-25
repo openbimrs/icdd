@@ -11,8 +11,8 @@ Document Delivery (ICDD): ZIP containers that preserve payload documents while
 RDF describes the container and links elements across documents.
 
 This repository is the **only implementation home** of ICDD in OpenBIM.rs.
-Applications such as Solibri-rs and Poing consume this crate instead of carrying
-private ZIP, RDF/XML, or ICDD parsers.
+Solibri-rs and Poing migration is tracked as consumer work: their end state is a
+thin adapter over this crate, without private ZIP, RDF/XML, or ICDD parsers.
 
 ## Status
 
@@ -21,8 +21,8 @@ private ZIP, RDF/XML, or ICDD parsers.
 | Capability | Status |
 | --- | --- |
 | Conventional ICDD archive paths | Implemented |
-| Lazy ZIP container reading and payload access | Implemented |
-| Safe payload extraction | Implemented; rejects traversal paths |
+| Lazy ZIP container reading, bounded payload reads, and streaming copies | Implemented |
+| Safe payload extraction | Implemented; rejects traversal and symlink paths and bounds expansion |
 | Deterministic ZIP construction | Implemented |
 | Typed `Index.rdf` decoding | Implemented |
 | Typed ISO 21597-1 linkset decoding | Implemented |
@@ -33,9 +33,11 @@ private ZIP, RDF/XML, or ICDD parsers.
 | Complete normative ISO 21597 validation | Not yet implemented |
 | Byte-identical rewrite of arbitrary unknown ZIP/XML data | Not yet implemented |
 
-The reader is intentionally lenient enough to inspect imperfect containers;
-call `IcddContainer::conformance_issues` when conformance reporting matters.
-This is not a claim of complete ISO certification.
+The reader accepts documented compatibility casing where lookup remains unique,
+but fails closed on ambiguous ZIP names, unsafe paths, malformed RDF, spoofed
+ontology namespaces, and missing declared linksets. `conformance_issues` reports
+non-fatal layout and indicator findings. This is not a claim of complete ISO
+certification.
 
 ## Crates
 

@@ -159,24 +159,34 @@ fn insert_unique(
     bytes: &[u8],
     kind: &str,
 ) -> Result<(), IcddError> {
-    if entries.insert(path.clone(), bytes.to_vec()).is_some() {
+    if entries
+        .keys()
+        .any(|existing| existing.eq_ignore_ascii_case(&path))
+    {
         return Err(IcddError::NotConformant(format!(
-            "duplicate {kind} path: {path}"
+            "duplicate case-folded {kind} path: {path}"
         )));
     }
+    entries.insert(path, bytes.to_vec());
     Ok(())
 }
 
 fn normalize_relative_path(path: &str) -> Result<String, IcddError> {
-    let normalized = path.replace('\\', "/");
+    if path.contains('\\') || path.starts_with('/') || path.ends_with('/') || path.contains("//") {
+        return Err(IcddError::NotConformant(format!(
+            "archive path must be a canonical relative forward-slash path: {path}"
+        )));
+    }
     let mut safe = PathBuf::new();
-    for component in Path::new(&normalized).components() {
+    for component in Path::new(path).components() {
         match component {
             Component::Normal(segment) => safe.push(segment),
-            Component::CurDir => {}
-            Component::ParentDir | Component::RootDir | Component::Prefix(_) => {
+            Component::CurDir
+            | Component::ParentDir
+            | Component::RootDir
+            | Component::Prefix(_) => {
                 return Err(IcddError::NotConformant(format!(
-                    "unsafe archive path: {path}"
+                    "unsafe or non-canonical archive path: {path}"
                 )));
             }
         }
@@ -184,7 +194,7 @@ fn normalize_relative_path(path: &str) -> Result<String, IcddError> {
     if safe.as_os_str().is_empty() {
         return Err(IcddError::NotConformant("empty archive path".into()));
     }
-    Ok(safe.to_string_lossy().replace('\\', "/"))
+    Ok(path.to_string())
 }
 
 fn write_directory(

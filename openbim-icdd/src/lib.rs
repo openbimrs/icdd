@@ -13,7 +13,7 @@
 //!
 //! - deterministic ZIP reading and writing;
 //! - neutral `Index.rdf` and linkset views;
-//! - lazy payload access and safe extraction;
+//! - lazy, bounded payload access, streaming copies, and safe extraction;
 //! - raw RDF graph parse/serialize APIs that preserve unknown RDF semantics;
 //! - conformance diagnostics for the mandatory Part 1 layout.
 

@@ -60,52 +60,60 @@ impl RdfGraph {
     /// the whole file is consumed; a malformed triple aborts with an error
     /// (the ICDD conformance gate is elsewhere).
     pub fn parse<R: Read>(reader: R) -> Result<Self, IcddError> {
-        let mut g = RdfGraph::default();
-        for t in oxrdfxml::RdfXmlParser::new().for_reader(reader) {
-            let t = t.map_err(|e| IcddError::Rdf(e.to_string()))?;
-            let subj = match t.subject {
+        let mut graph = RdfGraph::default();
+        for (index, triple) in oxrdfxml::RdfXmlParser::new().for_reader(reader).enumerate() {
+            if index == crate::rdf::MAX_RDF_TRIPLES {
+                return Err(IcddError::NotConformant(format!(
+                    "RDF graph exceeds the {}-triple limit",
+                    crate::rdf::MAX_RDF_TRIPLES
+                )));
+            }
+            let triple = triple.map_err(|error| IcddError::Rdf(error.to_string()))?;
+            let subject = match triple.subject {
                 NamedOrBlankNode::NamedNode(n) => n.into_string(),
                 NamedOrBlankNode::BlankNode(b) => format!("_:{}", b.as_str()),
             };
-            let pred = t.predicate.into_string();
-            let obj = match t.object {
-                Term::NamedNode(n) => Obj::Resource(n.into_string()),
-                Term::BlankNode(b) => Obj::Resource(format!("_:{}", b.as_str())),
-                Term::Literal(l) => Obj::Literal(l.value().to_string()),
+            let predicate = triple.predicate.into_string();
+            let object = match triple.object {
+                Term::NamedNode(node) => Obj::Resource(node.into_string()),
+                Term::BlankNode(node) => Obj::Resource(format!("_:{}", node.as_str())),
+                Term::Literal(literal) => Obj::Literal(literal.value().to_string()),
                 // rdf-12 quoted triples: not used by ICDD.
                 #[allow(unreachable_patterns)]
                 _ => continue,
             };
-            g.by_subject.entry(subj).or_default().push((pred, obj));
+            graph
+                .by_subject
+                .entry(subject)
+                .or_default()
+                .push((predicate, object));
         }
-        Ok(g)
+        Ok(graph)
     }
 
-    /// All subject ids whose `rdf:type` local name equals `type_local`
-    /// (e.g. `"InternalDocument"`, `"Link"`). Matched by local name so the
-    /// per-container base namespace doesn't matter.
-    pub fn subjects_of_type(&self, type_local: &str) -> Vec<&str> {
-        let mut out = Vec::new();
-        for (subj, po) in &self.by_subject {
-            for (p, o) in po {
-                if p == vocab::RDF_TYPE {
-                    if let Obj::Resource(t) = o {
-                        if vocab::local_name(t) == type_local {
-                            out.push(subj.as_str());
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-        out
+    /// All subjects with an exact `rdf:type` IRI in `namespace`.
+    pub fn subjects_of_type_ns(&self, namespace: &str, type_local: &str) -> Vec<&str> {
+        let expected = format!("{namespace}{type_local}");
+        self.by_subject
+            .iter()
+            .filter_map(|(subject, pairs)| {
+                pairs
+                    .iter()
+                    .any(|(predicate, object)| {
+                        predicate == vocab::RDF_TYPE
+                            && matches!(object, Obj::Resource(iri) if iri == &expected)
+                    })
+                    .then_some(subject.as_str())
+            })
+            .collect()
     }
 
-    /// True if `subject` has an `rdf:type` whose local name equals `type_local`.
-    pub fn has_type(&self, subject: &str, type_local: &str) -> bool {
+    /// True if `subject` has the exact namespaced RDF type.
+    pub fn has_type_ns(&self, subject: &str, namespace: &str, type_local: &str) -> bool {
+        let expected = format!("{namespace}{type_local}");
         self.objects(subject, vocab::RDF_TYPE)
             .iter()
-            .any(|o| matches!(o, Obj::Resource(t) if vocab::local_name(t) == type_local))
+            .any(|object| matches!(object, Obj::Resource(iri) if iri == &expected))
     }
 
     /// The objects of `predicate_iri` on `subject` (empty if none).
@@ -121,40 +129,22 @@ impl RdfGraph {
             .unwrap_or_default()
     }
 
-    /// The objects of a predicate identified by its LOCAL name in the given
-    /// namespace-agnostic sense — matches any predicate whose local name equals
-    /// `pred_local`. Used for `ct:`/`ls:` predicates without hardcoding the
-    /// (fixed) namespace, tolerant of the two ISO namespace spellings.
-    pub fn objects_local(&self, subject: &str, pred_local: &str) -> Vec<&Obj> {
-        self.by_subject
-            .get(subject)
-            .map(|po| {
-                po.iter()
-                    .filter(|(p, _)| vocab::local_name(p) == pred_local)
-                    .map(|(_, o)| o)
-                    .collect()
-            })
-            .unwrap_or_default()
+    /// Objects for an exact ontology predicate.
+    pub fn objects_ns(&self, subject: &str, namespace: &str, pred_local: &str) -> Vec<&Obj> {
+        self.objects(subject, &format!("{namespace}{pred_local}"))
     }
 
-    /// First literal value of a local-named predicate on `subject`.
-    pub fn literal(&self, subject: &str, pred_local: &str) -> Option<String> {
-        self.objects_local(subject, pred_local)
+    /// First literal for an exact ontology predicate.
+    pub fn literal_ns(&self, subject: &str, namespace: &str, pred_local: &str) -> Option<String> {
+        self.objects_ns(subject, namespace, pred_local)
             .into_iter()
-            .find_map(|o| o.as_literal().map(str::to_string))
+            .find_map(|object| object.as_literal().map(str::to_string))
     }
 
-    /// First resource reference of a local-named predicate on `subject`.
-    pub fn resource(&self, subject: &str, pred_local: &str) -> Option<String> {
-        self.objects_local(subject, pred_local)
+    /// First resource for an exact ontology predicate.
+    pub fn resource_ns(&self, subject: &str, namespace: &str, pred_local: &str) -> Option<String> {
+        self.objects_ns(subject, namespace, pred_local)
             .into_iter()
-            .find_map(|o| o.as_resource().map(str::to_string))
-    }
-
-    /// True if the subject has a boolean literal `true` for `pred_local`.
-    pub fn bool_true(&self, subject: &str, pred_local: &str) -> bool {
-        self.literal(subject, pred_local)
-            .map(|v| v.eq_ignore_ascii_case("true"))
-            .unwrap_or(false)
+            .find_map(|object| object.as_resource().map(str::to_string))
     }
 }
