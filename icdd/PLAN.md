@@ -1,31 +1,21 @@
-# icdd implementation plan
+# icdd alias plan
 
-Status: name reserved; implementation not started.
-Last updated: 2026-08-24
+Status: published pure re-export; no implementation belongs here.
+Last updated: 2026-08-25
 
-This is task state, not ambient context. Follow `AGENTS.md`; claim one task ID,
-record blockers/decisions under it, and check it off only with evidence.
+## Invariant
 
-## Established boundary
+`src/lib.rs` contains only:
 
-Exactly one line of code: pub use <canonical>::*. Defining a type here is a defect -- see scripts/check-alias-purity.sh.
+```rust
+pub use openbim_icdd::*;
+```
 
-## Open work
-
-See `docs/ROADMAP.md` Stage 5 for sequencing. Nothing is claimed here yet.
-
-## Planned file map
-
-These paths are compiled private scaffold modules. Implement inside the named
-owner and expose a public symbol only through an intentional parent re-export.
-
-- (none claimed yet)
+The dependency stays pinned to the exact canonical version. The standalone and
+integration gates enforce both conditions.
 
 ## Work queue
 
-- [ ] `ALI-ICDD` - keep this a pure re-export; nothing to implement
+- [ ] `ALI-ICDD` — release only after the matching `openbim-icdd` version exists
 
-## Completion log
-
-Nothing completed yet. Record the proof command and its result here when an
-item above is checked off.
+There is no feature implementation queue for this package.

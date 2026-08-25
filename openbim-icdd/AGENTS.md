@@ -1,14 +1,17 @@
 # openbim-icdd instructions
 
-Purpose: ISO 21597 Information Container for linked Document Delivery.
+Purpose: canonical ISO 21597 Information Container for linked Document Delivery
+implementation. This crate owns every ICDD type and behavior.
 
-Follow `../AGENTS.md`. Read `PLAN.md` only for assigned implementation or
-roadmap work; keep progress, blockers, and evidence there.
+Follow `../AGENTS.md`. Read `PLAN.md` for assigned implementation or roadmap
+work; keep progress, blockers, and evidence there.
 
 ## Boundary
 
-openbim-core plus openbim-codec-zip. RDF stays inside this crate.
+May consume `openbim-core`, ZIP framing, and public IFC contracts. RDF remains
+inside this crate until another real consumer exists. Payload documents remain
+opaque unless callers explicitly parse them.
 
 ## Status
 
-Reserved.
+Reserved scaffold. Do not claim parsing, writing, or validation yet.

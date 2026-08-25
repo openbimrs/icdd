@@ -1,27 +1,26 @@
 # icdd
 
-ISO 21597 ICDD (Information Container for linked Document Delivery) for Rust.
+Short-name package for ISO 21597 Information Container for linked Document
+Delivery.
 
-This crate is a **pure re-export** of [`openbim-icdd`](https://crates.io/crates/openbim-icdd). It
-defines nothing of its own — it exists so the standard is reachable under the
-short name practitioners actually use, while there remains exactly one
-definition of every type.
+This package is a **pure re-export** of
+[`openbim-icdd`](https://crates.io/crates/openbim-icdd). It defines nothing of
+its own, so both package names expose exactly the same types and behavior.
 
 ```toml
+# Choose either package; do not add both directly.
 icdd = "0.1"
-# identical to:
-openbim-icdd = "0.1"
+# openbim-icdd = "0.1"
 ```
 
-Use whichever name reads better in your project. Do not depend on both.
+The dependency is pinned to the exact canonical version, and the repository gate
+rejects implementation or independent type definitions in this package.
 
 ## Status
 
-**Reserved.** See [`openbim-icdd`](https://crates.io/crates/openbim-icdd) for what is implemented.
-
-## Part of nehirde
-
-A pure-Rust IFC and openBIM toolchain: <https://github.com/GeneralPawz/nehirde>
+**Reserved scaffold.** See
+[`openbim-icdd`](https://crates.io/crates/openbim-icdd) for the capability
+status.
 
 ## License
 

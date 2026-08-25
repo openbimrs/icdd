@@ -1,14 +1,20 @@
 # icdd instructions
 
-Purpose: Alias crate: pure re-export so the standard is reachable under its common name.
+Purpose: short-name crates.io package alias for `openbim-icdd`.
 
-Follow `../AGENTS.md`. Read `PLAN.md` only for assigned implementation or
-roadmap work; keep progress, blockers, and evidence there.
+Follow `../AGENTS.md`. Read `PLAN.md` for release coordination.
 
 ## Boundary
 
-Exactly one line of code: pub use <canonical>::*. Defining a type here is a defect -- see scripts/check-alias-purity.sh.
+Exactly one code line is allowed:
+
+```rust
+pub use openbim_icdd::*;
+```
+
+Defining a type or behavior here is a defect. Keep the dependency pinned to the
+exact canonical version; `scripts/check-alias-purity.sh` enforces both rules.
 
 ## Status
 
-Published to reserve the name.
+Published name reservation and pure re-export.

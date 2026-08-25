@@ -1,0 +1,9 @@
+/target
+/references
+**/*.rs.bk
+*.pdb
+.DS_Store
+*.swp
+.idea/
+.vscode/
+.hermes/

@@ -1,26 +1,30 @@
 # openbim-icdd
 
-ISO 21597 ICDD (Information Container for linked Document Delivery) for Rust.
+Canonical Rust package for ISO 21597 Information Container for linked Document
+Delivery (ICDD).
 
-The open ISO federation container: a ZIP holding payload documents untouched (IFC, PDF, XLSX, DWG, images) plus RDF describing which documents are inside and how elements across them link.
-
-Deliberately model-agnostic: it opens the container and yields payload bytes, but never builds an IFC model. An ICDD can carry documents this toolchain cannot parse at all.
+ICDD is an open federation container: a ZIP carries payload documents unchanged
+while RDF describes the container and links elements across those documents.
+The crate is deliberately payload-model-agnostic.
 
 ## Status
 
-**Reserved.** This release establishes the crate name and its place in the
-layering. It does not parse files yet — see the crate documentation for what is
-implemented versus reserved.
+**Reserved scaffold.** Version `0.1.0` establishes package ownership and the
+conventional archive path constants. It does not parse, validate, or write ICDD.
+See the [repository status table](https://github.com/openbimrs/icdd#status) for
+precise capability claims.
 
-No ISO/CEN schema is vendored in this crate. Types are written *from* the
-schemas; the schema files themselves are referenced out of tree, because
-possessing a copy of a standard does not establish the right to redistribute it.
+## Package names
 
-## Part of nehirde
+This is the canonical implementation and owns every type. The sibling
+[`icdd`](https://crates.io/crates/icdd) package is an exact-version pure
+re-export so users can choose either crates.io name without creating duplicate
+implementations.
 
-A pure-Rust IFC and openBIM toolchain: <https://github.com/GeneralPawz/nehirde>
+## Standards material
 
-Design rationale for the crate layout: `docs/adr/0015`.
+No ISO, DIN, CEN, or other restricted artifact is packaged. Local material
+belongs under the repository's ignored `references/` directory.
 
 ## License
 
