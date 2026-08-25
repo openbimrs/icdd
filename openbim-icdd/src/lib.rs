@@ -1,4 +1,6 @@
-//! `openbim-icdd` — ISO 21597 Information Container for linked Document Delivery.
+//! `icdd` — ISO 21597 Information Container for linked Document Delivery.
+//!
+//! Published in the `openbim-icdd` Cargo package.
 //!
 //! # What this is
 //!
