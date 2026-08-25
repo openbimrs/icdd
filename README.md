@@ -82,7 +82,8 @@ with this repository.
 
 ## Development
 
-Requires Rust `1.88` or newer.
+Requires Rust `1.88` or newer and Python `3.10` or newer for the semantic alias
+gate.
 
 ```bash
 git clone https://github.com/openbimrs/icdd.git

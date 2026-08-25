@@ -15,7 +15,7 @@ success from command exit codes.
 
 ## Project conventions
 
-- Rust 2021, MSRV 1.88, MIT.
+- Rust 2021, MSRV 1.88, Python 3.10+ for gate scripts, MIT.
 - Pure Rust; unsafe code is forbidden.
 - `openbim-icdd` owns every implementation and type.
 - `icdd` is a pure, exact-version re-export alias and defines no types.
