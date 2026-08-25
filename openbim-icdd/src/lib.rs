@@ -15,10 +15,10 @@
 //! implemented yet;** this reserved crate currently exposes only conventional
 //! archive path constants.
 //!
-//! A future implementation is expected to compose ZIP framing from
-//! `openbim-codec-zip` while keeping the ICDD-specific RDF layer in this family.
-//! That preserves a model-agnostic boundary without forcing unrelated standard
-//! packages to compile an RDF stack.
+//! A future implementation will use `zip` directly and keep archive limits,
+//! duplicate-name handling, deterministic selection, and ICDD-specific RDF
+//! policy in this family. That preserves a model-agnostic boundary without
+//! forcing unrelated standard packages to compile an RDF stack.
 //!
 //! # Status
 //!

@@ -9,6 +9,8 @@ and this project follows [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Replaced the retired shared archive-wrapper direction with direct `zip`
+  mechanics and ICDD-owned archive safety and selection policy.
 - Corrected crate-level status documentation to distinguish the reserved path
   constants from the future ZIP/RDF implementation boundary.
 - Extracted the ICDD family into its canonical standalone repository while

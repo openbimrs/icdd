@@ -30,7 +30,7 @@ the Cargo process status.
 
 - `openbim-icdd` may depend on released `openbim-core`, ZIP framing, and public
   IFC contracts where the standard requires them.
-- IFC, core, and codec crates must never depend on ICDD.
+- IFC and core crates must never depend on ICDD.
 - RDF remains an ICDD concern until another real consumer justifies extraction.
 - `icdd/src/lib.rs` must contain only `pub use openbim_icdd::*;`.
 - Cross-repository dependency versions are explicit in crate manifests; do not

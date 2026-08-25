@@ -19,7 +19,8 @@ success from command exit codes.
 - Pure Rust; unsafe code is forbidden.
 - `openbim-icdd` owns every implementation and type.
 - `icdd` is a pure, exact-version re-export alias and defines no types.
-- ICDD consumes core/codec/IFC contracts; those layers never depend on ICDD.
+- ICDD may consume core and IFC contracts plus `zip` directly; those layers
+  never depend on ICDD.
 - Never commit standards PDFs, schemas, or other artifacts without confirmed
   redistribution rights. Local material belongs under ignored `references/`.
 - Use Keep a Changelog and distinguish implemented from reserved capabilities.

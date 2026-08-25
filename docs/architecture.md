@@ -33,15 +33,13 @@ prevent canonical and alias releases from drifting.
 ## Dependency direction
 
 ```text
-codec/core  <-  IFC  <-  ICDD
-     ^                  |
-     +------------------+
+core  <-  IFC  <-  ICDD  ->  zip / RDF mechanics
 
 openbim facade  ->  ICDD
 ```
 
 - ICDD may consume shared vocabulary, ZIP framing, and public IFC contracts.
-- IFC, core, and codec crates must never depend on ICDD.
+- IFC and core crates must never depend on ICDD.
 - RDF remains inside ICDD until another real consumer justifies extraction.
 - The `openbim` facade may optionally re-export ICDD.
 
