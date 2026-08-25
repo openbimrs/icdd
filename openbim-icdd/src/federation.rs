@@ -97,12 +97,31 @@ fn validate_transform(transform: &[f64; 16]) -> Result<(), IcddError> {
     let determinant = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
     let log_abs_determinant =
         determinant.abs().ln() + scales[0].ln() + scales[1].ln() + scales[2].ln();
-    if !determinant.is_finite()
-        || determinant == 0.0
-        || !log_abs_determinant.is_finite()
-        || log_abs_determinant <= f64::EPSILON.ln()
-    {
+    if !determinant.is_finite() || determinant == 0.0 || !log_abs_determinant.is_finite() {
         return Err(invalid("federation member transform must be invertible"));
+    }
+
+    // A nonzero determinant is not sufficient when the inverse would overflow
+    // `f64` (for example, a `1e-320` axis scale). `A = D * N`, where `D`
+    // contains the row scales above, so `A^-1 = N^-1 * D^-1`. Check the
+    // adjugate in log space to avoid overflowing while proving every inverse
+    // component remains representable. Zero cofactors are exact zeroes.
+    let inverse_cofactors = [
+        [e * i - f * h, c * h - b * i, b * f - c * e],
+        [f * g - d * i, a * i - c * g, c * d - a * f],
+        [d * h - e * g, b * g - a * h, a * e - b * d],
+    ];
+    let log_abs_normalized_determinant = determinant.abs().ln();
+    let log_max = f64::MAX.ln();
+    for row in inverse_cofactors {
+        for (column, cofactor) in row.into_iter().enumerate() {
+            if cofactor != 0.0
+                && cofactor.abs().ln() - log_abs_normalized_determinant - scales[column].ln()
+                    > log_max
+            {
+                return Err(invalid("federation member transform must be invertible"));
+            }
+        }
     }
     Ok(())
 }

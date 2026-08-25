@@ -104,8 +104,15 @@ fn federation_writer_rejects_tiny_projective_terms() {
 #[test]
 fn federation_writer_accepts_small_but_invertible_transforms() {
     let mut manifest = manifest();
-    manifest.members[0].transform[0] = 1e-13;
+    manifest.members[0].transform[0] = 1e-300;
     assert!(write_poing_federation_icdd(&manifest, &payloads()).is_ok());
+}
+
+#[test]
+fn federation_writer_rejects_transforms_with_non_finite_inverse() {
+    let mut manifest = manifest();
+    manifest.members[0].transform[0] = 1e-320;
+    assert!(write_poing_federation_icdd(&manifest, &payloads()).is_err());
 }
 
 #[test]
