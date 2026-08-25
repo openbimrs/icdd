@@ -11,5 +11,4 @@ cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
 RUSTDOCFLAGS="-D warnings" cargo doc --locked --workspace --all-features --no-deps
 scripts/check-alias-purity.sh
 python3 scripts/test_alias_purity.py
-cargo package --locked -p openbim-icdd
-cargo package --locked -p icdd
+python3 scripts/verify-packages.py
