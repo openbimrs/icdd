@@ -1,27 +1,21 @@
 # openbim-icdd
 
-Canonical Rust package for ISO 21597 Information Container for linked Document
-Delivery (ICDD).
+Canonical Rust implementation of ISO 21597 Information Container for linked
+Document Delivery (ICDD).
 
-ICDD is an open federation container: a ZIP carries payload documents unchanged
-while RDF describes the container and links elements across those documents.
-The crate is deliberately payload-model-agnostic.
+The crate reads ZIP containers lazily, decodes typed `Index.rdf` and linkset
+views, exposes raw RDF/XML parse/serialize APIs for extensions, writes
+deterministic containers, and safely extracts opaque payloads. It uses the
+maintained `zip`, `oxrdfxml`, and `oxrdf` crates directly.
 
-## Status
+`0.2.0` is the first functional release. Complete normative ISO validation and
+byte-identical arbitrary archive rewriting are not yet claimed. See the
+[repository status table](https://github.com/openbimrs/icdd#status) for the
+precise capability boundary.
 
-**Reserved scaffold.** Version `0.1.0` establishes package ownership and the
-conventional archive path constants. It does not parse, validate, or write ICDD.
-See the [repository status table](https://github.com/openbimrs/icdd#status) for
-precise capability claims.
-
-## Package names
-
-This is the canonical implementation and owns every type. The sibling
+This package owns every ICDD type and behavior. The sibling
 [`icdd`](https://crates.io/crates/icdd) package is an exact-version pure
-re-export so users can choose either crates.io name without creating duplicate
-implementations.
-
-## Standards material
+re-export so users can choose either name without duplicate implementations.
 
 No ISO, DIN, CEN, or other restricted artifact is packaged. Local material
 belongs under the repository's ignored `references/` directory.

@@ -123,9 +123,9 @@ def main() -> None:
             candidate,
             "alias version drift with decoy",
             lambda alias, _canonical, _source, _extra: (
-                replace(alias, 'version = "0.1.0"', 'version = "0.1.1"'),
+                replace(alias, 'version = "0.2.0"', 'version = "0.2.1"'),
                 alias.write_text(
-                    'version = "0.1.0"\n' + alias.read_text(encoding="utf-8"),
+                    'version = "0.2.0"\n' + alias.read_text(encoding="utf-8"),
                     encoding="utf-8",
                 ),
             ),

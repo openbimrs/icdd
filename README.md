@@ -10,75 +10,100 @@ Pure-Rust infrastructure for ISO 21597 Information Container for linked
 Document Delivery (ICDD): ZIP containers that preserve payload documents while
 RDF describes the container and links elements across documents.
 
-This repository is the canonical home of the ICDD family in
-[OpenBIM.rs](https://github.com/openbimrs/openbim). The integration repository
-pins this repository under `packages/icdd`.
+This repository is the **only implementation home** of ICDD in OpenBIM.rs.
+Applications such as Solibri-rs and Poing consume this crate instead of carrying
+private ZIP, RDF/XML, or ICDD parsers.
 
 ## Status
 
-The published `0.1.0` releases are **reserved scaffolds**, not an ICDD reader,
-writer, or validator.
+`0.1.x` reserved the package names. `0.2.0` is the first functional release.
 
 | Capability | Status |
 | --- | --- |
 | Conventional ICDD archive paths | Implemented |
-| Two synchronized crates.io names | Implemented and structurally gated |
-| ZIP container reading/writing | Not implemented |
-| Index RDF decoding/encoding | Not implemented |
-| Linkset RDF decoding/encoding | Not implemented |
-| ISO 21597 validation | Not implemented |
-| Lossless unknown-data round-trip | Not implemented |
+| Lazy ZIP container reading and payload access | Implemented |
+| Safe payload extraction | Implemented; rejects traversal paths |
+| Deterministic ZIP construction | Implemented |
+| Typed `Index.rdf` decoding | Implemented |
+| Typed ISO 21597-1 linkset decoding | Implemented |
+| Raw RDF/XML parsing and serialization | Implemented; unknown triples survive semantic round-trip |
+| Generic payload, linkset, and ontology writing | Implemented |
+| Poing federation extension read/write | Implemented and deterministic |
+| Structural conformance reporting | Implemented |
+| Complete normative ISO 21597 validation | Not yet implemented |
+| Byte-identical rewrite of arbitrary unknown ZIP/XML data | Not yet implemented |
 
-No parser, writer, or validation capability should be inferred from the crates
-existing on crates.io.
+The reader is intentionally lenient enough to inspect imperfect containers;
+call `IcddContainer::conformance_issues` when conformance reporting matters.
+This is not a claim of complete ISO certification.
 
 ## Crates
 
 | Package | Purpose |
 | --- | --- |
-| [`openbim-icdd`](openbim-icdd/) | Canonical implementation; owns every type and behavior |
+| [`openbim-icdd`](openbim-icdd/) | Canonical implementation; owns every ICDD type and behavior |
 | [`icdd`](icdd/) | Pure re-export alias pinned to the exact canonical version |
 
-Cargo has dependency renaming but no crates.io package aliases. Two package
-records are therefore required to reserve both names. `icdd` defines nothing of
-its own and re-exports `openbim-icdd`, so both names expose the same types rather
-than compiling duplicate implementations.
+Cargo has dependency renaming but no crates.io package aliases. `icdd` defines
+nothing and re-exports `openbim-icdd`, so both names expose identical types.
+Do not depend on both names directly.
 
 ## Install
 
-Use either package name:
-
 ```bash
 cargo add openbim-icdd
-# or
-cargo add icdd
+# or: cargo add icdd
 ```
 
-```rust
-use openbim_icdd::INDEX_PATH;
-// The short package exposes the same item as `icdd::INDEX_PATH`.
-assert_eq!(INDEX_PATH, "Index.rdf");
+```rust,no_run
+use openbim_icdd::IcddContainer;
+
+let mut container = IcddContainer::open_path("delivery.icdd")?;
+for document in container.ifc_documents_including_requested() {
+    println!("{}", document.name.as_deref().unwrap_or(&document.id));
+}
+# Ok::<(), openbim_icdd::IcddError>(())
 ```
 
-Do not depend on both names directly. The alias already brings in the canonical
-package at an exact version.
+Constructors accept RDF/XML produced by the maintained Oxigraph stack and write
+the archive through the maintained `zip` crate:
+
+```rust,no_run
+use openbim_icdd::IcddArchiveBuilder;
+
+let bytes = IcddArchiveBuilder::new(include_bytes!("Index.rdf"))?
+    .add_payload("model.ifc", std::fs::read("model.ifc")?)?
+    .finish()?;
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+## Dependency boundary
+
+ICDD uses maintained ecosystem libraries **directly**:
+
+- [`zip`](https://crates.io/crates/zip) for archive I/O and Deflate;
+- [`oxrdfxml`](https://crates.io/crates/oxrdfxml) for RDF/XML parsing and serialization;
+- [`oxrdf`](https://crates.io/crates/oxrdf) for RDF terms and triples.
+
+There is deliberately no first-party XML or ZIP abstraction crate in this
+dependency path. ICDD is the domain boundary; XML and ZIP are implementation
+technologies. The retired `openbim-codec-xml` scaffold is not used.
 
 ## Architecture
 
-- [`docs/architecture.md`](docs/architecture.md) — repository, dependency, and alias boundaries
+- [`docs/architecture.md`](docs/architecture.md) — ownership, dependencies, and alias boundaries
 - [`openbimrs/openbim`](https://github.com/openbimrs/openbim) — integrated workspace and facade
-- [`openbim-core`](https://crates.io/crates/openbim-core) — shared openBIM vocabulary
 
-ICDD is deliberately model-agnostic. Payload IFC, PDF, spreadsheet, drawing, or
-image bytes remain payloads; the ICDD layer handles container and link metadata
-without requiring every payload format to be understood.
+Payload IFC, PDF, spreadsheet, drawing, or image bytes remain opaque. ICDD owns
+container and link metadata without importing every payload format.
 
 ## Standards material
 
 No ISO, DIN, CEN, or other restricted standards artifact is tracked or packaged.
 Locally available references belong under ignored `references/`. A fixture may
-enter version control only when its redistribution terms are known and compatible
-with this repository.
+enter version control only when its redistribution terms are known and compatible.
+Synthetic fixtures cover CI; local oracle tests may use restricted references
+without publishing them.
 
 ## Development
 

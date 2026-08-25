@@ -2,73 +2,97 @@
 
 ## Repository role
 
-`openbimrs/icdd` is the canonical source repository for the ICDD family.
-`openbimrs/openbim` pins a verified commit at `packages/icdd` and provides
-ecosystem-level integration tests and the feature-gated `openbim` facade.
+`openbimrs/icdd` is the single implementation repository for ICDD.
+`openbimrs/openbim` pins it at `packages/icdd`; Solibri-rs exposes compatibility
+adapters; Poing consumes those adapters. Neither consumer owns a second archive
+or RDF implementation.
 
-The child repository must remain buildable without the integration workspace.
-Published crates therefore use explicit package metadata and versioned registry
-dependencies, not inheritance from a parent workspace.
+The child repository remains independently buildable and publishable.
 
 ## Package identity
 
 ```text
-icdd  -- exact-version dependency -->  openbim-icdd  -->  openbim-core
-(alias; no types)                      (all behavior)
+icdd  -- exact-version dependency -->  openbim-icdd
+(alias; no types)                      (all ICDD behavior)
 ```
 
-Cargo permits consumers to rename a dependency locally, but crates.io has no
-publisher-side alias facility. Reserving both `openbim-icdd` and `icdd` requires
-two package records. The short package contains only:
+Cargo has no publisher-side package alias. The short package therefore contains
+only:
 
 ```rust
 pub use openbim_icdd::*;
 ```
 
-This is not duplicated implementation. Every public type originates in
-`openbim-icdd`, so dependency graphs that encounter both names still have one
-type identity. The alias dependency uses an exact `=` version requirement to
-prevent canonical and alias releases from drifting.
+Every public type originates in `openbim-icdd`. The alias dependency uses an
+exact `=` requirement so canonical and alias releases cannot drift.
 
-## Dependency direction
+## Domain and implementation boundaries
 
 ```text
-core  <-  IFC  <-  ICDD  ->  zip / RDF mechanics
+core  <-  IFC
+                 +--> zip 8.x
+openbim-icdd ----+--> oxrdfxml 0.2.x --> quick-xml (transitive)
+                 +--> oxrdf 0.3.x
 
-openbim facade  ->  ICDD
+openbim facade ------> openbim-icdd
+Solibri codec adapter -> openbim-icdd
+Poing runtime --------> Solibri adapter -> openbim-icdd
 ```
 
-- ICDD may consume shared vocabulary, ZIP framing, and public IFC contracts.
-- IFC and core crates must never depend on ICDD.
+- ICDD owns ISO 21597 archive paths, typed index/linkset views, structural
+  conformance reporting, deterministic construction, and extension handling.
+- `zip`, XML, and RDF syntax are implementation technologies supplied by
+  maintained ecosystem crates.
+- There is no dependency on `openbim-codec-xml` or `openbim-codec-zip`.
+- Payload IFC, PDF, spreadsheet, drawing, and image bytes remain opaque.
+- IFC and core crates must never depend on ICDD; other standards must not depend
+  on ICDD merely because ICDD can carry their files.
 - RDF remains inside ICDD until another real consumer justifies extraction.
 - The `openbim` facade may optionally re-export ICDD.
 
-ICDD remains payload-model-agnostic: carrying an IFC or PDF does not require the
-container crate to parse it.
+The raw RDF API intentionally exposes Oxigraph triple types. That avoids a
+second home-grown RDF model and lets extension graphs preserve unknown triples
+semantically through parse/serialize cycles.
 
-## Workspace independence
+## Reader policy
 
-Package version, edition, MSRV, license, authors, repository, and
-cross-repository dependency versions are explicit in each published manifest.
-The parent integration workspace substitutes its local `openbim-core` through a
-`[patch.crates-io]` entry, guaranteeing one package identity while exercising
-the exact pinned child commit.
+The reader decodes `Index.rdf` and referenced linksets eagerly while retaining
+lazy access to payload bytes in the ZIP archive. It applies explicit uncompressed
+size limits to RDF metadata to stop compressed metadata bombs. Payloads may be
+large by design and are read only on request.
+
+Parsing is lenient enough to inspect imperfect containers. Structural issues are
+reported by `IcddContainer::conformance_issues`; successful parsing is not a
+claim of complete normative ISO validation.
+
+Filesystem extraction rejects absolute, parent-directory, and platform-prefix
+paths before joining an archive name to an output directory.
+
+## Writer policy
+
+`IcddArchiveBuilder` accepts RDF/XML and opaque payloads, validates metadata
+before writing, validates all archive-relative paths, rejects duplicate entries,
+and emits deterministic entry ordering and timestamps. RDF/XML generation uses
+`oxrdfxml`; no XML string concatenation is required by consumers.
+
+The Poing federation extension is isolated from the ISO core behind explicitly
+named `PoingFederation*` types and functions. Solibri converts its neutral model
+to these transport types rather than moving Solibri model ownership into ICDD.
 
 ## Standards artifacts
 
-This repository does not track ISO, DIN, CEN, or other restricted standards
-material. Local references live under ignored `references/`. Conformance
-fixtures require known redistribution rights before admission.
+No ISO, DIN, CEN, or other restricted standards material is tracked. Local
+references live under ignored `references/`; only fixtures with known compatible
+redistribution rights may enter version control.
 
 ## Cross-repository delivery
 
 Changes spanning repositories follow dependency order:
 
-1. land and publish lower-level contract changes;
-2. update and verify `openbim-icdd` standalone;
-3. publish `openbim-icdd`;
-4. publish the exact-version `icdd` alias;
-5. update and verify the `openbim` submodule pin;
-6. publish the integration commit.
+1. verify, review, land, and publish `openbim-icdd`;
+2. publish the exact-version `icdd` alias;
+3. replace consumer implementations with the released canonical dependency;
+4. update the `openbim` submodule pin;
+5. verify consumers from clean trees and fresh registry resolution.
 
-The superproject pin is the compatibility declaration and rollback point.
+Each submodule/dependency pin is a compatibility declaration and rollback point.

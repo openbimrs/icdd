@@ -1,53 +1,52 @@
 //! `openbim-icdd` — ISO 21597 Information Container for linked Document Delivery.
 //!
-//! # What this is
+//! ICDD is a ZIP container holding opaque payload documents plus RDF/XML that
+//! describes those documents and the links between their elements. This crate
+//! owns that container boundary; it deliberately does not parse IFC, PDF, or
+//! any other payload format.
 //!
-//! The open ISO federation container: a ZIP holding payload documents
-//! untouched (IFC, PDF, XLSX, DWG, images) plus RDF describing which documents
-//! are inside (`Index.rdf`) and how elements across them link
-//! (`Payload triples/*.rdf`).
+//! ZIP and RDF/XML are handled directly by maintained upstream crates (`zip`,
+//! `oxrdfxml`, and `oxrdf`). OpenBIM.rs does not wrap those general formats in
+//! home-grown XML or ZIP codec packages.
 //!
-//! # Intended boundary
+//! # Implemented
 //!
-//! An ICDD's geometry lives inside its payload IFC files. A future front-end is
-//! intended to open the container, decode RDF into a neutral form, and expose
-//! payload bytes without depending on `ifc-model`. **Those operations are not
-//! implemented yet;** this reserved crate currently exposes only conventional
-//! archive path constants.
-//!
-//! A future implementation will use `zip` directly and keep archive limits,
-//! duplicate-name handling, deterministic selection, and ICDD-specific RDF
-//! policy in this family. That preserves a model-agnostic boundary without
-//! forcing unrelated standard packages to compile an RDF stack.
-//!
-//! # Status
-//!
-//! **Reserved — no implementation.** Published to establish the name.
+//! - deterministic ZIP reading and writing;
+//! - neutral `Index.rdf` and linkset views;
+//! - lazy payload access and safe extraction;
+//! - raw RDF graph parse/serialize APIs that preserve unknown RDF semantics;
+//! - conformance diagnostics for the mandatory Part 1 layout.
 
 #![forbid(unsafe_code)]
 
+mod container;
+mod error;
+mod federation;
+mod index;
+mod linkset;
+mod rdfgraph;
+mod writer;
+
+pub mod rdf;
+pub mod read;
+pub mod schema;
+pub mod vocab;
+
+pub use error::IcddError;
+pub use federation::{
+    parse_poing_federation_icdd, write_poing_federation_icdd, FederationIcddPayload,
+    PoingFederationManifest, PoingFederationMember,
+};
+pub use rdf::{parse_rdf_xml, serialize_rdf_xml, RdfXmlOptions};
+pub use read::IcddContainer;
+pub use schema::*;
+pub use writer::IcddArchiveBuilder;
+
 /// Conventional path of the container index inside an ICDD archive.
-///
-/// Fixed by the standard; a ZIP without it is not an ICDD, which is the
-/// cheapest available discriminator against a plain archive.
 pub const INDEX_PATH: &str = "Index.rdf";
-
+/// Conventional directory holding ontology resources.
+pub const ONTOLOGY_RESOURCES_DIR: &str = container::ONTOLOGY_DIR;
 /// Conventional directory holding payload documents.
-pub const PAYLOAD_DOCUMENTS_DIR: &str = "Payload documents";
-
+pub const PAYLOAD_DOCUMENTS_DIR: &str = container::PAYLOAD_DOCS_DIR;
 /// Conventional directory holding linkset RDF graphs.
-pub const PAYLOAD_TRIPLES_DIR: &str = "Payload triples";
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn container_paths_are_the_standard_ones() {
-        assert_eq!(INDEX_PATH, "Index.rdf");
-        // Both payload directories contain a space; quoting them in shell or
-        // ZIP tooling is a recurring source of mistakes.
-        assert!(PAYLOAD_DOCUMENTS_DIR.contains(' '));
-        assert!(PAYLOAD_TRIPLES_DIR.contains(' '));
-    }
-}
+pub const PAYLOAD_TRIPLES_DIR: &str = container::PAYLOAD_TRIPLES_DIR;
