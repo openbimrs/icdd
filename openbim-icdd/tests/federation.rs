@@ -125,6 +125,87 @@ fn federation_writer_rejects_overflowing_singular_transforms() {
 }
 
 #[test]
+fn federation_writer_rejects_exactly_singular_scaled_transforms() {
+    let mut manifest = manifest();
+    let scale = 2.0_f64.powi(-100);
+    manifest.members[0].transform = [
+        -scale,
+        -7.0 * scale,
+        5.0 * scale,
+        0.0,
+        5.0 * scale,
+        0.0,
+        -5.0 * scale,
+        0.0,
+        -4.0 * scale,
+        7.0 * scale,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+    ];
+    assert!(write_poing_federation_icdd(&manifest, &payloads()).is_err());
+}
+
+#[test]
+fn federation_writer_rejects_exact_inverse_overflow_boundary() {
+    let mut manifest = manifest();
+    manifest.members[0].transform[0] = f64::from_bits(0x0004_0000_0000_0000);
+    assert!(write_poing_federation_icdd(&manifest, &payloads()).is_err());
+}
+
+#[test]
+fn federation_writer_accepts_exact_finite_inverse_boundary() {
+    let mut manifest = manifest();
+    manifest.members[0].transform[0] = f64::from_bits(0x0008_0000_0000_0000);
+    assert!(write_poing_federation_icdd(&manifest, &payloads()).is_ok());
+}
+
+#[test]
+fn federation_writer_rejects_zero_linear_transform() {
+    let mut manifest = manifest();
+    manifest.members[0].transform = [
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0,
+    ];
+    assert!(write_poing_federation_icdd(&manifest, &payloads()).is_err());
+}
+
+#[test]
+fn federation_writer_accepts_permuted_axes() {
+    let mut manifest = manifest();
+    manifest.members[0].transform = [
+        0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0,
+    ];
+    assert!(write_poing_federation_icdd(&manifest, &payloads()).is_ok());
+}
+
+#[test]
+fn federation_writer_accepts_exactly_invertible_cancellation_matrix() {
+    let mut manifest = manifest();
+    manifest.members[0].transform = [
+        -307_258_300_628.0,
+        487_843_568_709.0,
+        517_377.0,
+        0.0,
+        -281_793_347_017.0,
+        730_387_279_869.0,
+        774_604.0,
+        0.0,
+        -593_877.0,
+        942_917.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+    ];
+    assert!(write_poing_federation_icdd(&manifest, &payloads()).is_ok());
+}
+
+#[test]
 fn federation_parser_rejects_missing_internal_member_payloads() {
     let archive = write_poing_federation_icdd(&manifest(), &payloads()).unwrap();
     let mut input = ZipArchive::new(Cursor::new(archive)).unwrap();

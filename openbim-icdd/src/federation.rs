@@ -2,6 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use num_bigint::{BigInt, Sign};
 use serde::Serialize;
 use uuid::Uuid;
 
@@ -76,54 +77,97 @@ fn validate_transform(transform: &[f64; 16]) -> Result<(), IcddError> {
         ));
     }
 
-    // Scale each row independently before taking the determinant. This avoids
-    // overflow/underflow while preserving singularity (including proportional
-    // rows with very large finite coefficients).
     let rows = [
         [transform[0], transform[1], transform[2]],
         [transform[4], transform[5], transform[6]],
         [transform[8], transform[9], transform[10]],
     ];
-    let scales = rows.map(|row| row.into_iter().map(f64::abs).fold(0.0, f64::max));
-    if scales.contains(&0.0) {
-        return Err(invalid("federation member transform must be invertible"));
-    }
-    let normalized = [
-        rows[0].map(|value| value / scales[0]),
-        rows[1].map(|value| value / scales[1]),
-        rows[2].map(|value| value / scales[2]),
-    ];
-    let [[a, b, c], [d, e, f], [g, h, i]] = normalized;
+    let (exact, common_exponent) = exact_integer_matrix(rows);
+    let [[a, b, c], [d, e, f], [g, h, i]] = &exact;
     let determinant = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
-    let log_abs_determinant =
-        determinant.abs().ln() + scales[0].ln() + scales[1].ln() + scales[2].ln();
-    if !determinant.is_finite() || determinant == 0.0 || !log_abs_determinant.is_finite() {
+    if determinant == BigInt::from(0_u8) {
         return Err(invalid("federation member transform must be invertible"));
     }
 
-    // A nonzero determinant is not sufficient when the inverse would overflow
-    // `f64` (for example, a `1e-320` axis scale). `A = D * N`, where `D`
-    // contains the row scales above, so `A^-1 = N^-1 * D^-1`. Check the
-    // adjugate in log space to avoid overflowing while proving every inverse
-    // component remains representable. Zero cofactors are exact zeroes.
+    // Every finite f64 is a dyadic rational, so the determinant decision can be
+    // exact and scale invariant. If A = B * 2^common_exponent, then
+    // A^-1 = adj(B) / det(B) * 2^-common_exponent. Compare that rational form
+    // against f64::MAX without rounding or constructing an overflowing inverse.
     let inverse_cofactors = [
         [e * i - f * h, c * h - b * i, b * f - c * e],
         [f * g - d * i, a * i - c * g, c * d - a * f],
         [d * h - e * g, b * g - a * h, a * e - b * d],
     ];
-    let log_abs_normalized_determinant = determinant.abs().ln();
-    let log_max = f64::MAX.ln();
     for row in inverse_cofactors {
-        for (column, cofactor) in row.into_iter().enumerate() {
-            if cofactor != 0.0
-                && cofactor.abs().ln() - log_abs_normalized_determinant - scales[column].ln()
-                    > log_max
-            {
+        for cofactor in row {
+            if !inverse_component_fits(&cofactor, &determinant, common_exponent) {
                 return Err(invalid("federation member transform must be invertible"));
             }
         }
     }
     Ok(())
+}
+
+fn exact_integer_matrix(rows: [[f64; 3]; 3]) -> ([[BigInt; 3]; 3], i32) {
+    let dyadics = rows.map(|row| row.map(f64_dyadic));
+    let common_exponent = dyadics
+        .iter()
+        .flatten()
+        .filter_map(|(significand, exponent)| {
+            (significand != &BigInt::from(0_u8)).then_some(*exponent)
+        })
+        .min()
+        .unwrap_or(0);
+    let exact = dyadics.map(|row| {
+        row.map(|(significand, exponent)| {
+            if significand == BigInt::from(0_u8) {
+                significand
+            } else {
+                significand
+                    << usize::try_from(exponent - common_exponent).expect("minimum exponent")
+            }
+        })
+    });
+    (exact, common_exponent)
+}
+
+fn f64_dyadic(value: f64) -> (BigInt, i32) {
+    let bits = value.to_bits();
+    let negative = bits >> 63 != 0;
+    let encoded_exponent = ((bits >> 52) & 0x7ff) as i32;
+    let fraction = bits & ((1_u64 << 52) - 1);
+    if encoded_exponent == 0 && fraction == 0 {
+        return (BigInt::from(0_u8), 0);
+    }
+
+    let (mut significand, mut exponent) = if encoded_exponent == 0 {
+        (fraction, -1074)
+    } else {
+        ((1_u64 << 52) | fraction, encoded_exponent - 1023 - 52)
+    };
+    let trailing_zeros = significand.trailing_zeros();
+    significand >>= trailing_zeros;
+    exponent += trailing_zeros as i32;
+    let significand = BigInt::from(significand);
+    (if negative { -significand } else { significand }, exponent)
+}
+
+fn inverse_component_fits(cofactor: &BigInt, determinant: &BigInt, exponent: i32) -> bool {
+    if cofactor == &BigInt::from(0_u8) {
+        return true;
+    }
+    let magnitude = |value: &BigInt| match value.sign() {
+        Sign::Minus => -value,
+        _ => value.clone(),
+    };
+    let left = magnitude(cofactor);
+    let right = magnitude(determinant) * BigInt::from((1_u64 << 53) - 1);
+    let exponent_difference = -exponent - 971;
+    if exponent_difference >= 0 {
+        (left << exponent_difference as usize) <= right
+    } else {
+        left <= (right << (-exponent_difference) as usize)
+    }
 }
 
 fn validate_manifest(manifest: &PoingFederationManifest) -> Result<(), IcddError> {
@@ -501,4 +545,37 @@ fn required(graph: &RdfGraph, subject: &str, predicate: &str) -> Result<String, 
 
 fn invalid(message: &str) -> IcddError {
     IcddError::NotConformant(message.to_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_transform;
+
+    #[test]
+    fn exact_invertibility_matches_small_integer_oracle() {
+        let mut state = 0x6a09_e667_f3bc_c909_u64;
+        for case in 0..1_024 {
+            let mut coefficients = [0_i64; 9];
+            for coefficient in &mut coefficients {
+                state = state
+                    .wrapping_mul(6_364_136_223_846_793_005)
+                    .wrapping_add(1_442_695_040_888_963_407);
+                *coefficient = ((state >> 32) % 201) as i64 - 100;
+            }
+            let [a, b, c, d, e, f, g, h, i] = coefficients;
+            let determinant = i128::from(a)
+                * (i128::from(e) * i128::from(i) - i128::from(f) * i128::from(h))
+                - i128::from(b) * (i128::from(d) * i128::from(i) - i128::from(f) * i128::from(g))
+                + i128::from(c) * (i128::from(d) * i128::from(h) - i128::from(e) * i128::from(g));
+            let transform = [
+                a as f64, b as f64, c as f64, 0.0, d as f64, e as f64, f as f64, 0.0, g as f64,
+                h as f64, i as f64, 0.0, 0.0, 0.0, 0.0, 1.0,
+            ];
+            assert_eq!(
+                validate_transform(&transform).is_ok(),
+                determinant != 0,
+                "integer determinant mismatch in case {case}: {coefficients:?}"
+            );
+        }
+    }
 }
