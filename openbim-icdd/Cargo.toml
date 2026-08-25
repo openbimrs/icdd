@@ -11,11 +11,5 @@ description = "ISO 21597 ICDD (Information Container for linked Document Deliver
 keywords = ["bim", "openbim", "ifc", "aec"]
 categories = ["parser-implementations", "data-structures"]
 
-# `openbim-icdd` is the crates.io package name; `icdd` is the crate name used
-# in Rust code. One package and one library target keep both names attached to
-# exactly the same implementation.
-[lib]
-name = "icdd"
-
 [dependencies]
 openbim-core.workspace = true

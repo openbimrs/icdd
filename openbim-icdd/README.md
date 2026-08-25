@@ -2,20 +2,6 @@
 
 ISO 21597 ICDD (Information Container for linked Document Delivery) for Rust.
 
-Install the `openbim-icdd` package and import its one library crate as `icdd`:
-
-```toml
-[dependencies]
-openbim-icdd = "0.1"
-```
-
-```rust
-use icdd::INDEX_PATH;
-```
-
-The package name and Rust crate name point to the same implementation; there is
-no separate short-name wrapper package.
-
 The open ISO federation container: a ZIP holding payload documents untouched (IFC, PDF, XLSX, DWG, images) plus RDF describing which documents are inside and how elements across them link.
 
 Deliberately model-agnostic: it opens the container and yields payload bytes, but never builds an IFC model. An ICDD can carry documents this toolchain cannot parse at all.
