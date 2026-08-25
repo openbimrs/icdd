@@ -9,6 +9,8 @@ and this project follows [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Corrected crate-level status documentation to distinguish the reserved path
+  constants from the future ZIP/RDF implementation boundary.
 - Extracted the ICDD family into its canonical standalone repository while
   preserving its OpenBIM.rs history.
 - Made package and dependency metadata independent of the integration workspace.

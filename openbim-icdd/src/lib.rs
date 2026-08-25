@@ -7,18 +7,18 @@
 //! are inside (`Index.rdf`) and how elements across them link
 //! (`Payload triples/*.rdf`).
 //!
-//! # It is a front-end, not a model
+//! # Intended boundary
 //!
-//! An ICDD's geometry lives inside its payload IFC files. This crate opens the
-//! container, decodes the RDF into a neutral form and yields payload bytes —
-//! it must **not** depend on `ifc-model`. Keeping it model-agnostic is what
-//! lets an ICDD carry documents this workspace cannot parse at all.
+//! An ICDD's geometry lives inside its payload IFC files. A future front-end is
+//! intended to open the container, decode RDF into a neutral form, and expose
+//! payload bytes without depending on `ifc-model`. **Those operations are not
+//! implemented yet;** this reserved crate currently exposes only conventional
+//! archive path constants.
 //!
-//! # Two layers, one format
-//!
-//! ZIP framing comes from `openbim-codec-zip`. The RDF layer is deliberately **not** in
-//! `wire-*`: ICDD is this workspace's only RDF consumer, and putting an RDF
-//! stack down there would make every `openbim-ids` user compile it.
+//! A future implementation is expected to compose ZIP framing from
+//! `openbim-codec-zip` while keeping the ICDD-specific RDF layer in this family.
+//! That preserves a model-agnostic boundary without forcing unrelated standard
+//! packages to compile an RDF stack.
 //!
 //! # Status
 //!
