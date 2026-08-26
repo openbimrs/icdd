@@ -11,8 +11,8 @@ Document Delivery (ICDD): ZIP containers that preserve payload documents while
 RDF describes the container and links elements across documents.
 
 This repository is the **only implementation home** of ICDD in OpenBIM.rs.
-Solibri-rs and Poing migration is tracked as consumer work: their end state is a
-thin adapter over this crate, without private ZIP, RDF/XML, or ICDD parsers.
+Downstream applications should consume this crate rather than own private ZIP,
+RDF/XML, or ICDD implementations.
 
 ## Status
 
@@ -28,16 +28,19 @@ thin adapter over this crate, without private ZIP, RDF/XML, or ICDD parsers.
 | Typed ISO 21597-1 linkset decoding | Implemented |
 | Raw RDF/XML parsing and serialization | Implemented; unknown triples survive semantic round-trip |
 | Generic payload, linkset, and ontology writing | Implemented |
-| Poing federation extension read/write | Implemented and deterministic |
-| Structural conformance reporting | Implemented |
-| Complete normative ISO 21597 validation | Not yet implemented |
-| Byte-identical rewrite of arbitrary unknown ZIP/XML data | Not yet implemented |
+| Opaque payload-byte preservation | Implemented |
+| Structural conformance reporting | Implemented for the owned archive, index, and linkset contract |
 
 The reader accepts documented compatibility casing where lookup remains unique,
 but fails closed on ambiguous ZIP names, unsafe paths, malformed RDF, spoofed
 ontology namespaces, and missing declared linksets. `conformance_issues` reports
-non-fatal layout and indicator findings. This is not a claim of complete ISO
-certification.
+non-fatal layout and indicator findings. These checks are not a complete
+normative ISO 21597 conformance suite or certification claim.
+
+The preservation boundary is explicit: opaque payload bytes remain exact and
+unknown RDF triples survive semantic parse/serialize round-trips. RDF/XML
+lexical layout and reconstructed ZIP-envelope bytes are intentionally not a
+byte-identical rewrite contract; deterministic output is the writer guarantee.
 
 ## Crates
 

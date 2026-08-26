@@ -52,7 +52,10 @@ Poing runtime --------> Solibri adapter -> openbim-icdd
 
 The raw RDF API intentionally exposes Oxigraph triple types. That avoids a
 second home-grown RDF model and lets extension graphs preserve unknown triples
-semantically through parse/serialize cycles.
+semantically through parse/serialize cycles. This is a semantic guarantee, not
+lexical byte identity: RDF/XML namespace prefixes, whitespace, and triple order
+may change, and deterministic archive construction does not reproduce the input
+ZIP envelope. Opaque payload bytes remain exact.
 
 ## Reader policy
 

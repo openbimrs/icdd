@@ -7,6 +7,13 @@ and this project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- Clarified that structural checks are not complete normative ISO certification
+  and documented the exact payload/RDF semantic preservation boundary without
+  implying byte-identical RDF/XML or ZIP-envelope reconstruction.
+- Removed application-specific consumer state from the public capability table.
+
 ## [0.2.0] - 2026-08-25
 
 ### Added
