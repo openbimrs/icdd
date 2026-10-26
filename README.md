@@ -4,7 +4,7 @@
 [![openbim-icdd](https://img.shields.io/crates/v/openbim-icdd.svg)](https://crates.io/crates/openbim-icdd)
 [![icdd](https://img.shields.io/crates/v/icdd.svg)](https://crates.io/crates/icdd)
 [![docs.rs](https://docs.rs/openbim-icdd/badge.svg)](https://docs.rs/openbim-icdd)
-[![MSRV](https://img.shields.io/badge/MSRV-1.88-blue)](https://www.rust-lang.org)
+[![MSRV](https://img.shields.io/badge/MSRV-1.99-blue)](https://www.rust-lang.org)
 
 Pure-Rust infrastructure for ISO 21597 Information Container for linked
 Document Delivery (ICDD): ZIP containers that preserve payload documents while
@@ -112,7 +112,7 @@ without publishing them.
 
 ## Development
 
-Requires Rust `1.88` or newer and Python `3.10` or newer for the semantic alias
+Requires Rust `1.99` or newer and Python `3.10` or newer for the semantic alias
 gate.
 
 ```bash

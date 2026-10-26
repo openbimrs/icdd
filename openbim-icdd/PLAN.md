@@ -41,7 +41,7 @@ must consume this crate rather than maintaining their own archive/RDF parser.
 ## Validation
 
 1. Write consumer-compatible tests before implementation and observe failure.
-2. Run standalone format/build/test/Clippy/rustdoc/package gates on Rust 1.88.
+2. Run standalone format/build/test/Clippy/rustdoc/package gates on Rust 1.99.
 3. Mutation-probe alias purity and canonical-dependency enforcement.
 4. Run Solibri ICDD, CLI, and Python tests against the canonical crate.
 5. Run Poing importer tests against the migrated binding/fallback path.
