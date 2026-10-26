@@ -9,6 +9,7 @@ and this project follows [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Raise MSRV to Rust 1.99.
 - Relicensed repository-authored work from MIT to `AGPL-3.0-or-later`; historical releases remain under their published MIT terms, and third-party material retains its own terms.
 - Clarified that structural checks are not complete normative ISO certification
   and documented the exact payload/RDF semantic preservation boundary without
