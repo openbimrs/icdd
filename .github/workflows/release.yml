@@ -1,0 +1,160 @@
+# Publish openbim-icdd and its alias icdd to crates.io when a release tag
+# `v<version>` is pushed.
+#
+# crates.io trusted publishing (OIDC): there is no token secret. crates.io
+# trusts exactly this repository, this file name (`release.yml`) and the
+# `crates.io` environment -- renaming either breaks publishing until each
+# crate's Settings -> Trusted Publishing entry on crates.io follows. The
+# temporary token lives for 30 minutes and is revoked when the job ends.
+#
+# Releasing: bump both package versions plus the alias pin, date the CHANGELOG
+# section, commit on main, then push an annotated tag `v<version>` on that commit. Run it by hand
+# (Actions -> Release -> Run workflow) with a tag name to rehearse a release:
+# the tagged commit is gated and packaged, nothing is published.
+name: Release
+
+on:
+  push:
+    tags:
+      - "v[0-9]*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to rehearse, e.g. v0.2.1 (gate and package only)"
+        required: true
+
+# Never cancel a release halfway.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  TAG: ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
+
+jobs:
+  gate:
+    name: Plan and gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      version: ${{ steps.plan.outputs.version }}
+    steps:
+      - name: Check out the tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.TAG }}
+          fetch-depth: 0
+      - name: Require the tag to be on main
+        # A tag on an unmerged branch would publish code main never gated.
+        run: |
+          git fetch --quiet origin main
+          git merge-base --is-ancestor HEAD origin/main \
+            || { echo "::error::$TAG is not on main"; exit 1; }
+      - name: Install Rust 1.99.1
+        uses: dtolnay/rust-toolchain@d124f86f28ff42855784ff3319f48ac182c248f8 # 1.99.1
+        with:
+          components: rustfmt, clippy
+      - name: Require the tag to name both crates' version
+        id: plan
+        run: |
+          version="$(cargo metadata --format-version 1 --no-deps \
+            | python3 -c 'import json,sys; v={p["name"]: p["version"] for p in json.load(sys.stdin)["packages"]}; assert v["openbim-icdd"] == v["icdd"], v; print(v["openbim-icdd"])')" \
+            || { echo "::error::openbim-icdd and icdd versions differ"; exit 1; }
+          [ "$TAG" = "v$version" ] \
+            || { echo "::error::tag $TAG does not match Cargo.toml version $version"; exit 1; }
+          grep -q "^## \[$version\]" CHANGELOG.md \
+            || { echo "::error::CHANGELOG.md has no [$version] section"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Run the gate on the tagged commit
+        # The same gate as CI. No cache in a release build.
+        env:
+          CARGO_TARGET_DIR: ${{ runner.temp }}/openbim-icdd-target
+        run: bash scripts/gate.sh
+
+  publish:
+    name: Publish to crates.io
+    needs: gate
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    environment:
+      name: crates.io
+      url: https://crates.io/crates/openbim-icdd/${{ needs.gate.outputs.version }}
+    permissions:
+      contents: read
+      id-token: write # crates.io trusted publishing (OIDC)
+    steps:
+      - name: Check out the tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.TAG }}
+      - name: Install Rust 1.99.1
+        uses: dtolnay/rust-toolchain@d124f86f28ff42855784ff3319f48ac182c248f8 # 1.99.1
+      - name: Check which crates are already live
+        # Re-running a partly failed release finishes it instead of failing
+        # on what already succeeded.
+        id: live
+        env:
+          VERSION: ${{ needs.gate.outputs.version }}
+        run: |
+          live() {
+            status="$(curl -s -o /dev/null -w '%{http_code}' \
+              -A 'openbimrs/icdd release workflow (github.com/openbimrs/icdd)' \
+              "https://crates.io/api/v1/crates/$1/$VERSION")"
+            [ "$status" = 200 ] && echo true || echo false
+          }
+          canonical="$(live openbim-icdd)"
+          alias="$(live icdd)"
+          echo "canonical=$canonical" >> "$GITHUB_OUTPUT"
+          echo "alias=$alias" >> "$GITHUB_OUTPUT"
+          echo "any=$([ "$canonical" = false ] || [ "$alias" = false ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - name: Authenticate with crates.io
+        if: steps.live.outputs.any == 'true'
+        id: auth
+        uses: rust-lang/crates-io-auth-action@3268eb413133e2960fa4ae0e963ca76380c54cd9 # v1.0.6
+      - name: Publish openbim-icdd
+        if: steps.live.outputs.canonical != 'true'
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+        run: cargo publish -p openbim-icdd --locked
+      - name: Publish icdd
+        # After openbim-icdd: the alias pins its exact version. cargo publish
+        # waits until the canonical crate is available in the index.
+        if: steps.live.outputs.alias != 'true'
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+        run: cargo publish -p icdd --locked
+
+  github-release:
+    name: GitHub release
+    needs: [gate, publish]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write # create the release
+    steps:
+      - name: Check out the tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.TAG }}
+      - name: Create the release from the changelog section
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.gate.outputs.version }}
+        run: |
+          python3 - > notes.md <<'EOF'
+          import os
+          import re
+          text = open("CHANGELOG.md", encoding="utf-8").read()
+          start = text.index(f"## [{os.environ['VERSION']}]")
+          rest = text[start:]
+          end = re.search(r"\n(## \[|\[[^\]]+\]: )", rest[1:])
+          section = rest if end is None else rest[: end.start() + 1]
+          print(section.split("\n", 1)[1].strip())
+          EOF
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "release $TAG already exists"
+          else
+            gh release create "$TAG" --title "openbim-icdd $VERSION" --notes-file notes.md --verify-tag
+          fi
