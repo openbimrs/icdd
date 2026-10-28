@@ -131,4 +131,4 @@ evidence and update the status table without overstating coverage.
 
 ## License
 
-AGPL-3.0-or-later — see [`LICENSE`](LICENSE).
+`AGPL-3.0-or-later OR LicenseRef-Commercial` — see [`LICENSE`](LICENSE) and [`LICENSING.md`](LICENSING.md); a commercial licence is available from the copyright holder named in `NOTICE`.

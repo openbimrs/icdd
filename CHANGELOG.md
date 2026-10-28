@@ -7,8 +7,14 @@ and this project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-28
+
 ### Changed
 
+- **Licence:** `AGPL-3.0-or-later OR LicenseRef-Commercial`; the last
+  published release (0.2.0) was `MIT`. A commercial licence is available from
+  the copyright holder named in `NOTICE`. See `LICENSING.md`. The crates ship
+  `LICENSE`, `NOTICE` and `LICENSES/LicenseRef-Commercial.txt`.
 - Raise MSRV to Rust 1.99.
 - Relicensed repository-authored work from MIT to `AGPL-3.0-or-later`; historical releases remain under their published MIT terms, and third-party material retains its own terms.
 - Clarified that structural checks are not complete normative ISO certification
@@ -56,6 +62,7 @@ and this project follows [Semantic Versioning](https://semver.org/).
 - Added conventional ICDD archive path constants.
 - Established `icdd` as a pure re-export of the canonical package.
 
-[Unreleased]: https://github.com/openbimrs/icdd/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/openbimrs/icdd/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/openbimrs/icdd/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/openbimrs/icdd/compare/v0.1.0...v0.2.0
 [0.1.0]: https://crates.io/crates/openbim-icdd/0.1.0

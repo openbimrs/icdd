@@ -1,16 +1,16 @@
 [package]
 name = "openbim-icdd"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 rust-version = "1.99"
-license = "AGPL-3.0-or-later"
+license = "AGPL-3.0-or-later OR LicenseRef-Commercial"
 authors = ["point-grey"]
 repository = "https://github.com/openbimrs/icdd"
 readme = "README.md"
 description = "ISO 21597 ICDD (Information Container for linked Document Delivery)."
 keywords = ["bim", "openbim", "ifc", "aec"]
 categories = ["parser-implementations", "data-structures"]
-include = ["Cargo.toml", "LICENSE", "README.md", "src/**", "LICENSES/MIT.txt"]
+include = ["Cargo.toml", "LICENSE", "README.md", "src/**", "NOTICE", "LICENSES/MIT.txt", "LICENSES/LicenseRef-Commercial.txt"]
 
 [dependencies]
 num-bigint = "0.4.8"

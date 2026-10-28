@@ -25,4 +25,4 @@ belongs under the repository's ignored `references/` directory.
 
 ## License
 
-AGPL-3.0-or-later
+`AGPL-3.0-or-later OR LicenseRef-Commercial`; a commercial licence is available from the copyright holder named in `NOTICE`.
