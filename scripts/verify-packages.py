@@ -84,6 +84,17 @@ for crate_name, version, source in (
     if not source.is_dir():
         raise SystemExit(f"Cargo package extraction missing: {source}")
 
+# Each archive ships byte-identical copies of the root licence texts and notice
+# and declares the dual expression.
+for crate_name, source in ((CANONICAL, canonical_source), (ALIAS, alias_source)):
+    for name in ("LICENSE", "NOTICE", "LICENSES/LicenseRef-Commercial.txt"):
+        shipped = source / name
+        if not shipped.is_file() or shipped.read_bytes() != (ROOT / name).read_bytes():
+            raise SystemExit(f"packaged {crate_name}: {name} is missing or differs from the root")
+    manifest = (source / "Cargo.toml").read_text(encoding="utf-8").splitlines()
+    if 'license = "AGPL-3.0-or-later OR LicenseRef-Commercial"' not in manifest:
+        raise SystemExit(f"packaged {crate_name}: unexpected license expression")
+
 config_dir = alias_source / ".cargo"
 config_dir.mkdir(exist_ok=True)
 (config_dir / "config.toml").write_text(
