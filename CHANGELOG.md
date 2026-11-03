@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-11-03
+
 ### Added
 
 - Typed RDF/XML writing: `ContainerIndex::to_rdf_xml`, `LinkSet::to_rdf_xml`,
@@ -93,7 +95,8 @@ and this project follows [Semantic Versioning](https://semver.org/).
 - Added conventional ICDD archive path constants.
 - Established `icdd` as a pure re-export of the canonical package.
 
-[Unreleased]: https://github.com/openbimrs/icdd/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/openbimrs/icdd/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/openbimrs/icdd/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/openbimrs/icdd/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/openbimrs/icdd/compare/v0.1.0...v0.2.0
 [0.1.0]: https://crates.io/crates/openbim-icdd/0.1.0
