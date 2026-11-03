@@ -319,6 +319,26 @@ impl<R: Read + Seek> IcddContainer<R> {
                 }
             }
         }
+        let documents: std::collections::BTreeSet<&str> = self
+            .index
+            .documents
+            .iter()
+            .map(|document| document.id.as_str())
+            .collect();
+        for linkset in &self.linksets {
+            for link in &linkset.links {
+                for element in &link.elements {
+                    if let Some(target) = element.document_id.as_deref() {
+                        if !documents.contains(target) {
+                            issues.push(format!(
+                                "linkset {}: link element {} references {target}, which is not a document of the index",
+                                linkset.filename, element.id
+                            ));
+                        }
+                    }
+                }
+            }
+        }
         match &self.index.description.conformance_indicator {
             Some(v) if v == vocab::CONFORMANCE_INDICATOR => {}
             Some(v) => issues.push(format!(

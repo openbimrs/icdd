@@ -7,6 +7,37 @@ and this project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Typed RDF/XML writing: `ContainerIndex::to_rdf_xml`, `LinkSet::to_rdf_xml`,
+  `IcddArchiveBuilder::from_index` and `IcddArchiveBuilder::add_typed_linkset`
+  encode documents (Internal, External, Folder, with the Secured and Encrypted
+  mix-ins and `ct:requested`), links (`ls:Link`, `ls:DirectedLink`,
+  `ls:Directed1toNLink`) and String, URI and Query identifiers, so consumers no
+  longer assemble `ct:`/`ls:` triples. Output goes through `serialize_rdf_xml`
+  and is deterministic. Invalid input returns `IcddError::NotConformant`:
+  duplicate ids, duplicate from/to ids or link elements, link elements whose
+  document is not in the index, links with fewer than two elements, directed
+  links without a from or a to element, query identifiers missing their
+  language or expression, blank-node labels that are not XML NCNames, a
+  `ct:creationDate` that is not an `xsd:dateTime`, and control characters XML
+  1.0 cannot carry.
+- `add_typed_linkset` takes only the linkset, not the issue's
+  `(linkset, index, base_iri)`: `from_index` stores the typed index and base in
+  the builder and the linkset is validated against them. On a builder made with
+  `new` it returns `NotConformant`.
+- `PartialEq` and `Eq` for the schema types.
+
+### Changed
+
+- `conformance_issues` is stricter: it also reports a linkset element whose
+  `ls:hasDocument` is not a document of the index, including for linksets
+  added with `add_linkset`.
+- The Poing federation writer builds its `Index.rdf` through the typed encoder.
+  Its `Index.rdf` bytes change: `ct:url` is now typed `xsd:anyURI` and the
+  prefix declarations differ (`ct` only; `ls` is declared only in linkset
+  files). The RDF triples are otherwise equivalent.
+
 ## [0.2.1] - 2026-10-28
 
 ### Changed

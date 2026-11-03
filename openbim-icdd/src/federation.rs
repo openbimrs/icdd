@@ -8,11 +8,11 @@ use uuid::Uuid;
 
 use crate::rdf::{Literal, NamedNode, Triple};
 use crate::rdfgraph::RdfGraph;
+use crate::schema::{ContainerDescription, ContainerIndex, Document, DocumentKind};
+use crate::vocab::{self, RDF_TYPE};
 use crate::{IcddArchiveBuilder, IcddContainer, IcddError, RdfXmlOptions};
 
-const CT: &str = "https://standards.iso.org/iso/21597/-1/ed-1/en/Container#";
 const POING: &str = "https://poing.dev/ns/federation/icdd/1#";
-const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 const RDFS_CLASS: &str = "http://www.w3.org/2000/01/rdf-schema#Class";
 const OWL_ONTOLOGY: &str = "http://www.w3.org/2002/07/owl#Ontology";
 const FEDERATION_RDF: &str = "poing-federation.rdf";
@@ -236,7 +236,7 @@ fn validate_bindings<'a>(
 }
 
 fn node(iri: impl Into<String>) -> Result<NamedNode, IcddError> {
-    NamedNode::new(iri.into()).map_err(|error| IcddError::Rdf(error.to_string()))
+    crate::encode::named(iri)
 }
 
 fn resource(subject: &NamedNode, predicate: &str, object: &str) -> Result<Triple, IcddError> {
@@ -259,60 +259,58 @@ fn literal(
     ))
 }
 
-fn index_graph(
+fn index_of(
     manifest: &PoingFederationManifest,
     bindings: &BTreeMap<&str, &FederationIcddPayload<'_>>,
-) -> Result<Vec<Triple>, IcddError> {
-    let base = format!("https://poing.dev/icdd/{}/", manifest.uuid);
-    let container = node(format!("{base}container-{}", manifest.uuid))?;
-    let metadata = node(format!("{base}federation-metadata"))?;
-    let mut triples = vec![
-        resource(&container, RDF_TYPE, &format!("{CT}ContainerDescription"))?,
-        literal(
-            &container,
-            &format!("{CT}conformanceIndicator"),
-            "ICDD-Part1-Container",
-        )?,
-        literal(&container, &format!("{CT}description"), &manifest.name)?,
-        resource(
-            &container,
-            &format!("{CT}containsDocument"),
-            metadata.as_str(),
-        )?,
-        resource(&metadata, RDF_TYPE, &format!("{CT}InternalDocument"))?,
-        literal(&metadata, &format!("{CT}name"), "Poing federation manifest")?,
-        literal(&metadata, &format!("{CT}filename"), FEDERATION_RDF)?,
-        literal(&metadata, &format!("{CT}filetype"), "rdf")?,
-        literal(&metadata, &format!("{CT}format"), "application/rdf+xml")?,
-    ];
+    base: &str,
+) -> ContainerIndex {
+    let document = |id: String, kind, name: &str| Document {
+        id,
+        kind,
+        name: Some(name.to_string()),
+        description: None,
+        filetype: None,
+        format: None,
+        checksum: None,
+        encrypted: false,
+        requested: false,
+    };
+    let mut documents = vec![Document {
+        filetype: Some("rdf".into()),
+        format: Some("application/rdf+xml".into()),
+        ..document(
+            format!("{base}federation-metadata"),
+            DocumentKind::Internal {
+                filename: FEDERATION_RDF.into(),
+            },
+            "Poing federation manifest",
+        )
+    }];
     for member in &manifest.members {
-        let member_node = node(format!("{base}member-{}", member.uuid))?;
-        triples.push(resource(
-            &container,
-            &format!("{CT}containsDocument"),
-            member_node.as_str(),
-        )?);
-        match bindings[member.id.as_str()] {
-            FederationIcddPayload::Internal { filename, .. } => {
-                triples.push(resource(
-                    &member_node,
-                    RDF_TYPE,
-                    &format!("{CT}InternalDocument"),
-                )?);
-                triples.push(literal(&member_node, &format!("{CT}filename"), *filename)?);
-            }
+        let kind = match bindings[member.id.as_str()] {
+            FederationIcddPayload::Internal { filename, .. } => DocumentKind::Internal {
+                filename: (*filename).into(),
+            },
             FederationIcddPayload::External { url, .. } => {
-                triples.push(resource(
-                    &member_node,
-                    RDF_TYPE,
-                    &format!("{CT}ExternalDocument"),
-                )?);
-                triples.push(literal(&member_node, &format!("{CT}url"), *url)?);
+                DocumentKind::External { url: (*url).into() }
             }
-        }
-        triples.push(literal(&member_node, &format!("{CT}name"), &member.name)?);
+        };
+        documents.push(document(
+            format!("{base}member-{}", member.uuid),
+            kind,
+            &member.name,
+        ));
     }
-    Ok(triples)
+    ContainerIndex {
+        description: ContainerDescription {
+            id: format!("{base}container-{}", manifest.uuid),
+            conformance_indicator: Some(vocab::CONFORMANCE_INDICATOR.into()),
+            description: Some(manifest.name.clone()),
+            creation_date: None,
+        },
+        documents,
+        linkset_files: Vec::new(),
+    }
 }
 
 fn federation_graph(manifest: &PoingFederationManifest) -> Result<Vec<Triple>, IcddError> {
@@ -390,7 +388,7 @@ fn encode(triples: &[Triple], base: &str) -> Result<Vec<u8>, IcddError> {
         triples,
         RdfXmlOptions::new()
             .with_base_iri(base)
-            .with_prefix("ct", CT)
+            .with_prefix("ct", vocab::CT)
             .with_prefix("poing", POING),
     )
 }
@@ -403,7 +401,7 @@ pub fn write_poing_federation_icdd(
     validate_manifest(manifest)?;
     let bindings = validate_bindings(manifest, payloads)?;
     let base = format!("https://poing.dev/icdd/{}/", manifest.uuid);
-    let index = encode(&index_graph(manifest, &bindings)?, &base)?;
+    let index = index_of(manifest, &bindings, &base).to_rdf_xml(&base)?;
     let federation_base = format!("{base}federation/");
     let federation = encode(&federation_graph(manifest)?, &federation_base)?;
     let ontology = encode(&ontology_graph()?, POING.trim_end_matches('#'))?;

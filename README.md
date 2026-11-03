@@ -28,8 +28,9 @@ RDF/XML, or ICDD implementations.
 | Typed ISO 21597-1 linkset decoding | Implemented |
 | Raw RDF/XML parsing and serialization | Implemented; unknown triples survive semantic round-trip |
 | Generic payload, linkset, and ontology writing | Implemented |
+| Typed `Index.rdf` and linkset encoding (`ContainerIndex::to_rdf_xml`, `LinkSet::to_rdf_xml`, `IcddArchiveBuilder::from_index`, `add_typed_linkset`) | Implemented; output reads back equal through the typed readers; rejects the invalid input listed in the rustdoc (not a full ISO 21597 validation) |
 | Opaque payload-byte preservation | Implemented |
-| Structural conformance reporting | Implemented for the owned archive, index, and linkset contract |
+| Structural conformance reporting | Implemented for the owned archive, index, and linkset contract, including linkset elements that name a document missing from the index |
 
 The reader accepts documented compatibility casing where lookup remains unique,
 but fails closed on ambiguous ZIP names, unsafe paths, malformed RDF, spoofed

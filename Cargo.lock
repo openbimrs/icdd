@@ -182,6 +182,7 @@ name = "openbim-icdd"
 version = "0.2.1"
 dependencies = [
  "num-bigint",
+ "oxiri",
  "oxrdf",
  "oxrdfxml",
  "serde",
