@@ -1,6 +1,6 @@
 [package]
 name = "openbim-icdd"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
 rust-version = "1.99"
 license = "AGPL-3.0-or-later OR LicenseRef-Commercial"
@@ -14,6 +14,7 @@ include = ["Cargo.toml", "LICENSE", "README.md", "src/**", "NOTICE", "LICENSES/M
 
 [dependencies]
 num-bigint = "0.4.8"
+oxiri = "0.2.11"
 oxrdf = "0.3.3"
 oxrdfxml = "0.2.3"
 serde = { version = "1.0", features = ["derive"] }

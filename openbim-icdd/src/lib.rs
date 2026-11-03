@@ -12,6 +12,7 @@
 //! # Implemented
 //!
 //! - deterministic ZIP reading and writing;
+//! - typed `Index.rdf` and linkset encoding that round-trips through the readers;
 //! - neutral `Index.rdf` and linkset views;
 //! - lazy, bounded payload access, streaming copies, and safe extraction;
 //! - raw RDF graph parse/serialize APIs that preserve unknown RDF semantics;
@@ -20,6 +21,9 @@
 #![forbid(unsafe_code)]
 
 mod container;
+mod encode;
+#[cfg(test)]
+mod encode_tests;
 mod error;
 mod federation;
 mod index;

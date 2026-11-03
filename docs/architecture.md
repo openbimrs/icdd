@@ -78,6 +78,16 @@ before writing, validates all archive-relative paths, rejects duplicate entries,
 and emits deterministic entry ordering and timestamps. RDF/XML generation uses
 `oxrdfxml`; no XML string concatenation is required by consumers.
 
+Typed values are written without hand-built triples: `ContainerIndex::to_rdf_xml`,
+`LinkSet::to_rdf_xml`, `IcddArchiveBuilder::from_index` and `add_typed_linkset`
+encode through the vocabulary in `vocab` and `serialize_rdf_xml`. The builder
+keeps the typed index and base from `from_index`, so `add_typed_linkset` checks
+a linkset against the index that was written. Input the readers cannot
+represent faithfully, or that breaks the Linkset cardinalities (duplicate ids,
+link elements whose document is not in the index, links with fewer than two
+elements, directed links without from or to), is rejected. The read-order and
+blank-node rules are in the rustdoc of the public methods.
+
 The Poing federation extension is isolated from the ISO core behind explicitly
 named `PoingFederation*` types and functions. Solibri converts its neutral model
 to these transport types rather than moving Solibri model ownership into ICDD.

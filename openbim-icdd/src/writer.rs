@@ -11,7 +11,8 @@ use crate::container::{ONTOLOGY_DIR, PAYLOAD_DOCS_DIR, PAYLOAD_TRIPLES_DIR};
 use crate::error::IcddError;
 use crate::index::parse_index;
 use crate::linkset::parse_linkset;
-use crate::schema::DocumentKind;
+use crate::schema::{ContainerIndex, DocumentKind, LinkSet};
+use crate::vocab;
 
 /// Builds a deterministic ISO 21597-1 ZIP container.
 ///
@@ -23,6 +24,8 @@ pub struct IcddArchiveBuilder {
     payloads: BTreeMap<String, Vec<u8>>,
     linksets: BTreeMap<String, Vec<u8>>,
     ontology_resources: BTreeMap<String, Vec<u8>>,
+    /// The typed index and base IRI, when made with `from_index`.
+    typed: Option<(ContainerIndex, String)>,
 }
 
 impl IcddArchiveBuilder {
@@ -35,7 +38,68 @@ impl IcddArchiveBuilder {
             payloads: BTreeMap::new(),
             linksets: BTreeMap::new(),
             ontology_resources: BTreeMap::new(),
+            typed: None,
         })
+    }
+
+    /// Start an archive from a typed [`ContainerIndex`], encoded with
+    /// [`ContainerIndex::to_rdf_xml`].
+    ///
+    /// The builder keeps the typed index and `base_iri`, and
+    /// [`add_typed_linkset`](Self::add_typed_linkset) validates against them, so
+    /// a linkset cannot be checked against a different index or base than the
+    /// one written.
+    ///
+    /// # Errors
+    ///
+    /// Everything `to_rdf_xml` rejects, plus [`IcddError::NotConformant`] when
+    /// `ct:conformanceIndicator` is not `ICDD-Part1-Container`: a container
+    /// without it is not a Part 1 container, so it is not written.
+    pub fn from_index(index: &ContainerIndex, base_iri: &str) -> Result<Self, IcddError> {
+        match index.description.conformance_indicator.as_deref() {
+            Some(vocab::CONFORMANCE_INDICATOR) => {}
+            other => {
+                return Err(IcddError::NotConformant(format!(
+                    "ct:conformanceIndicator must be '{}', found {other:?}",
+                    vocab::CONFORMANCE_INDICATOR
+                )))
+            }
+        }
+        let mut builder = Self::new(index.to_rdf_xml(base_iri)?)?;
+        builder.typed = Some((index.clone(), base_iri.to_string()));
+        Ok(builder)
+    }
+
+    /// Add a typed linkset below `Payload triples/`, encoded with
+    /// [`LinkSet::to_rdf_xml`] and stored under `linkset.filename`.
+    ///
+    /// Unlike the free-standing `LinkSet::to_rdf_xml`, this takes no index or
+    /// base: it uses the ones given to [`from_index`](Self::from_index).
+    ///
+    /// # Errors
+    ///
+    /// Everything `LinkSet::to_rdf_xml` rejects, plus
+    /// [`IcddError::NotConformant`] when the builder was not made with
+    /// `from_index` (it has no typed index to check against) or when the index
+    /// declares no linkset file named `linkset.filename`.
+    pub fn add_typed_linkset(self, linkset: &LinkSet) -> Result<Self, IcddError> {
+        let Some((index, base_iri)) = &self.typed else {
+            return Err(IcddError::NotConformant(
+                "add_typed_linkset needs a builder made with from_index".into(),
+            ));
+        };
+        if !index
+            .linkset_files
+            .iter()
+            .any(|file| file.filename.as_deref() == Some(linkset.filename.as_str()))
+        {
+            return Err(IcddError::NotConformant(format!(
+                "index declares no linkset file named {}",
+                linkset.filename
+            )));
+        }
+        let rdf = linkset.to_rdf_xml(index, base_iri)?;
+        self.add_linkset(&linkset.filename, rdf)
     }
 
     /// Add an opaque document below `Payload documents/`.

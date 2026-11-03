@@ -1,6 +1,6 @@
 [package]
 name = "icdd"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
 rust-version = "1.99"
 license = "AGPL-3.0-or-later OR LicenseRef-Commercial"
@@ -15,4 +15,4 @@ include = ["Cargo.toml", "LICENSE", "README.md", "src/lib.rs", "NOTICE", "LICENS
 [dependencies]
 # Exact pin prevents the alias and canonical package from exposing different
 # versions of the same API in one dependency graph.
-openbim-icdd = { path = "../openbim-icdd", version = "=0.2.1" }
+openbim-icdd = { path = "../openbim-icdd", version = "=0.2.2" }

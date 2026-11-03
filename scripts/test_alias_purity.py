@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -53,6 +54,17 @@ def require_rejection(candidate: Path, name: str, mutate: object) -> None:
         for path, content in originals.items():
             path.write_text(content, encoding="utf-8")
         extra.unlink(missing_ok=True)
+
+
+def drift_with_decoy(alias: Path) -> None:
+    """Drift the alias version, keeping the true version as a decoy line."""
+    match = re.search(r'^version = "[^"]+"$', alias.read_text(encoding="utf-8"), re.M)
+    if match is None:
+        raise SystemExit(f"mutation fixture missing a version in {alias}")
+    replace(alias, match.group(0), 'version = "0.0.0"')
+    alias.write_text(
+        match.group(0) + "\n" + alias.read_text(encoding="utf-8"), encoding="utf-8"
+    )
 
 
 def replace(path: Path, old: str, new: str) -> None:
@@ -124,13 +136,7 @@ def main() -> None:
         require_rejection(
             candidate,
             "alias version drift with decoy",
-            lambda alias, _canonical, _source, _extra: (
-                replace(alias, 'version = "0.2.1"', 'version = "0.2.2"'),
-                alias.write_text(
-                    'version = "0.2.1"\n' + alias.read_text(encoding="utf-8"),
-                    encoding="utf-8",
-                ),
-            ),
+            lambda alias, _canonical, _source, _extra: drift_with_decoy(alias),
         )
 
     print("alias purity mutations passed")

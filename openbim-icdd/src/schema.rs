@@ -9,7 +9,7 @@ use serde::Serialize;
 /// A parsed ISO 21597-1 container: its manifest, documents, and linksets.
 /// Payload bytes are read lazily from the still-open ZIP (see
 /// [`super::IcddContainer`]); this struct is the decoded RDF graph only.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ContainerIndex {
     /// The single `ct:ContainerDescription` manifest.
     pub description: ContainerDescription,
@@ -21,7 +21,7 @@ pub struct ContainerIndex {
 }
 
 /// The `ct:ContainerDescription` manifest object.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ContainerDescription {
     /// The RDF node id (`#id...`).
     pub id: String,
@@ -34,7 +34,7 @@ pub struct ContainerDescription {
 }
 
 /// A `ct:Linkset` reference (the file, not its parsed content).
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct LinksetRef {
     /// RDF node id.
     pub id: String,
@@ -46,7 +46,7 @@ pub struct LinksetRef {
 
 /// A `ct:*Document` individual (Internal / External / Folder), with the
 /// Secured/Encrypted mix-ins folded into flags.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Document {
     /// RDF node id (`#id...`) — link elements reference this via `ls:hasDocument`.
     pub id: String,
@@ -69,7 +69,7 @@ pub struct Document {
 }
 
 /// The concrete document class and its location payload.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum DocumentKind {
     /// `ct:InternalDocument` — a file inside the container.
@@ -90,7 +90,7 @@ pub enum DocumentKind {
 }
 
 /// A `ct:SecuredDocument` checksum.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Checksum {
     /// `ct:checksumAlgorithm`.
     pub algorithm: String,
@@ -127,7 +127,7 @@ impl Document {
 }
 
 /// A parsed link dataset (one `Payload triples/*.rdf` file).
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct LinkSet {
     /// The linkset filename (relative to `Payload triples/`).
     pub filename: String,
@@ -136,7 +136,7 @@ pub struct LinkSet {
 }
 
 /// An `ls:Link` — a set of ≥1 `ls:LinkElement` relating documents/elements.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Link {
     /// RDF node id.
     pub id: String,
@@ -151,7 +151,7 @@ pub struct Link {
 }
 
 /// An `ls:LinkElement` — a reference to a document (+ optional identifier into it).
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct LinkElement {
     /// RDF node id.
     pub id: String,
@@ -162,7 +162,7 @@ pub struct LinkElement {
 }
 
 /// An `ls:Identifier` (String / URI / Query based).
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ElementIdentifier {
     /// `ls:StringBasedIdentifier` — e.g. an IFC GUID or a spreadsheet row id.
